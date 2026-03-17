@@ -1,0 +1,10 @@
+JUCE/
+build/
+bin/
+obj/
+
+.DS_Store
+Thumbs.db
+
+*.jucer
+google-services.json
