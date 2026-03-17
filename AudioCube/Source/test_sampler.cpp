@@ -1,50 +1,40 @@
+#include "test_sampler.h"
 
 #include <cmath>
-#include <vector>
 #include <numbers>
 
-const float PI = std::numbers::pi_v<float>;
-const float DEFAULT_SAMPLE_RATE = 44100;
+static const float PI = std::numbers::pi_v<float>;
+static const float DEFAULT_SAMPLE_RATE = 44100.0f;
 
-class TestSampler {
-public:
+TestSampler::TestSampler() {
+    playhead = 0;
+    isPlaying = false;
+}
 
-    TestSampler() {
-        playhead = 0;
-        isPlaying = false;
-    }
+void TestSampler::trigger() {
+    playhead = 0;
+    isPlaying = true;
+}
 
-    void trigger() {
-        playhead = 0;
-        isPlaying = true;
-    }
-
-    void processBlock(float* outputBuffer, int numSamples) {
-        for (int i = 0; i < numSamples; i++) {
-            if (isPlaying && playhead < audioData.size()) {
-                    outputBuffer[i] = audioData[playhead];
-                    playhead++;
-            } else {
-                outputBuffer[i] = 0.0f;
-                isPlaying = false;
-            }
+void TestSampler::processBlock(float* outputBuffer, int numSamples) {
+    for (int i = 0; i < numSamples; i++) {
+        if (isPlaying && playhead < (int)audioData.size()) {
+            outputBuffer[i] = audioData[playhead];
+            playhead++;
+        } else {
+            outputBuffer[i] = 0.0f;
+            isPlaying = false;
         }
     }
+}
 
-    void generateSineWave(int secDuration, float hz) {
-        int totalSamples = DEFAULT_SAMPLE_RATE * secDuration;
-        
-        audioData.resize(totalSamples);
+void TestSampler::generateSineWave(int secDuration, float hz) {
+    int totalSamples = (int)(DEFAULT_SAMPLE_RATE * secDuration);
+    audioData.resize(totalSamples);
 
-        for (int t = 0; t < audioData.size(); ++t) {
-            float sinVal = sin((2.0f * PI) * hz * (static_cast<float>(t)/DEFAULT_SAMPLE_RATE));
-            audioData[t] = sinVal * 0.4f;
-        }
-
+    for (int t = 0; t < (int)audioData.size(); ++t) {
+        int variedHz = (hz + 261.63 + 349.23 + 523.25) * 0.25;
+        float sinVal = sinf((2.0f * PI) * variedHz * (static_cast<float>(t) / DEFAULT_SAMPLE_RATE));
+        audioData[t] = sinVal * 0.3f;
     }
-
-private:
-    int playhead;
-    bool isPlaying;
-    std::vector<float> audioData;
-};
+}

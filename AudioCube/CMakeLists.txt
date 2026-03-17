@@ -17,6 +17,8 @@ target_sources(AudioCube PRIVATE
     Source/test_sampler.cpp
 )
 
+target_include_directories(AudioCube PRIVATE Source)
+
 target_link_libraries(AudioCube PRIVATE
     juce::juce_audio_utils
     juce::juce_audio_devices
