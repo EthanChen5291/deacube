@@ -5,10 +5,11 @@
 #include "test_sampler.h"
 #include "grid_component.h"
 
-class MainAudioProcessor : public juce::AudioAppComponent 
-{
+class MainAudioProcessor : public juce::AudioAppComponent {
 public:
-    MainAudioProcessor() {
+    MainAudioProcessor() : grid(sampler) {
+        addAndMakeVisible(grid);
+        
         sampler.generateSineWave(10, 440.0f);
         sampler.trigger();
 
@@ -31,12 +32,16 @@ public:
         }
     }
 
+    void resized() override {
+        grid.setBounds(getLocalBounds());
+    }
+
     void prepareToPlay(int, double) override {}
     void releaseResources() override {}
 
 private:
     TestSampler sampler;
-    GridComponent grid(sampler);
+    GridComponent grid;
 };
 
 // start app 

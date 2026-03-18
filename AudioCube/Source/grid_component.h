@@ -9,7 +9,7 @@ class GridComponent : public juce::Component {
 public:
     GridComponent(TestSampler& s);
 
-    ~GridComponent() override;
+    ~GridComponent() override = default;
 
     void paint(juce::Graphics& g) override;
 
