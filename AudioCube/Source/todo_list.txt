@@ -1,0 +1,9 @@
+SHORT:
+- remove initial 10 second playing
+
+
+GENERAL:
+- add outlines to each tile to see the tiles. make the tiles squares.
+- add some space between the tiles and the edges of the screen
+- create dict to map tiles to frequencies
+- allow multiple notes to play at the same time
