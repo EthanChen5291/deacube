@@ -1,0 +1,25 @@
+#ifndef GRIDCOMPONENT_H
+#define GRIDCOMPONENT_H
+
+#include <juce_gui_basics/juce_gui_basics.h>
+#include "test_sampler.h"
+#include <vector>
+
+class GridComponent : public juce::Component {
+public:
+    GridComponent(TestSampler& s);
+
+    ~GridComponent() override;
+
+    void paint(juce::Graphics& g) override;
+
+    void mouseDown(const juce::MouseEvent& e) override;
+
+private:
+    TestSampler& sampler;
+    std::vector<bool> tileStates;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GridComponent)
+};
+
+#endif

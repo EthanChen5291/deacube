@@ -3,6 +3,7 @@
 #include <cmath>
 #include <numbers>
 #include "test_sampler.h"
+#include "grid_component.h"
 
 class MainAudioProcessor : public juce::AudioAppComponent 
 {
@@ -35,6 +36,7 @@ public:
 
 private:
     TestSampler sampler;
+    GridComponent grid(sampler);
 };
 
 // start app 

@@ -33,7 +33,7 @@ void TestSampler::generateSineWave(int secDuration, float hz) {
     audioData.resize(totalSamples);
 
     for (int t = 0; t < (int)audioData.size(); ++t) {
-        int variedHz = (hz + 261.63 + 349.23 + 523.25) * 0.25;
+        int variedHz = (hz) * 0.25;
         float sinVal = sinf((2.0f * PI) * variedHz * (static_cast<float>(t) / DEFAULT_SAMPLE_RATE));
         audioData[t] = sinVal * 0.3f;
     }

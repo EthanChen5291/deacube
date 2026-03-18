@@ -1,0 +1,27 @@
+JUCE::COMPONENT
+
+resized()	Called whenever the window changes size. This is where you calculate where your 144 squares should be.
+
+mouseDrag()	Like mouseDown, but triggers while you move the mouse. Perfect for "painting" colors onto your grid!
+
+mouseEnter()	Triggers when the mouse hovers over the grid. Good for showing a "highlight" square.
+
+setBounds()	How you tell a component where to sit on the screen and how big to be.
+
+isVisible()	A simple check to see if the component is currently hidden.
+
+-----
+
+JUCE::COMPONENT
+
+g.fillAll(colour): Paints the entire background (like g.fillAll(juce::Colours::black)).
+
+g.fillRect(x, y, w, h): Draws a solid, filled-in rectangle.
+
+g.drawRect(x, y, w, h, thickness): Draws just the outline/border.
+
+g.setOpacity(float): Makes the next thing you draw see-through (0.0 to 1.0).
+
+g.drawText("Hello", ...): Draws strings of text.
+
+g.drawEllipse(...): 

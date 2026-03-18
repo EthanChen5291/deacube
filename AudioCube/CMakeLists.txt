@@ -12,9 +12,11 @@ juce_add_gui_app(AudioCube
     PRODUCT_NAME "AudioCube")
 
 target_sources(AudioCube PRIVATE 
-    Source/main.cpp
+    Source/main_audio_processor.cpp
     Source/test_sampler.h
     Source/test_sampler.cpp
+    Source/grid_component.h
+    Source/grid_component.cpp
 )
 
 target_include_directories(AudioCube PRIVATE Source)
