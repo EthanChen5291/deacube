@@ -1,1 +1,1 @@
-![Audio Preview](Resources/Sprites/preview.png)
+![Audio Preview](AudioCube/Resources/Sprites/preview.png)
