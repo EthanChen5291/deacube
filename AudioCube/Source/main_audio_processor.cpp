@@ -10,8 +10,8 @@ public:
     MainAudioProcessor() : grid(sampler) {
         addAndMakeVisible(grid);
         
-        sampler.generateSineWave(10, 440.0f);
-        sampler.trigger();
+        // sampler.generateSineWave(10, 440.0f);
+        // sampler.trigger();
 
         setAudioChannels(0, 2); // 0 input 2 output
     }

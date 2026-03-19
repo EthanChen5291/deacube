@@ -29,20 +29,25 @@ void GridComponent::mouseDown(const juce::MouseEvent& e) {
 void GridComponent::paint(juce::Graphics& g) {
     g.fillAll(juce::Colours::black);
 
-    auto cellW = getWidth() / 12.0f;
-    auto cellH = getHeight() / 12.0f;
+    auto cellW = getWidth() / 16.0f;
+    auto cellH = getHeight() / 16.0f;
+
+    float borderSpaceW = (getWidth() - (cellW * 12))/2;
+    float borderSpaceH = (getHeight() - (cellH * 12))/2;
 
     for (int y = 0; y < 12; y++) {
         for (int x = 0; x < 12; x++) {
             int index = (y * 12) + x;
+            float width = borderSpaceW + (x * cellW);
+            float height = borderSpaceH + (y * cellH);
 
             if (tileStates[index]) {
                 g.setColour(juce::Colours::cyan.withAlpha(0.6f));
-                g.fillRect(x * cellW, y * cellH, cellW, cellH);
+                g.fillRect(width, height, cellW, cellH);
             }
 
             g.setColour(juce::Colours::white.withAlpha(0.2f));
-            g.fillRect(x * cellW, y * cellH, cellW, cellH);
+            g.fillRect(width, height, cellW, cellH);
         }
     }
 }

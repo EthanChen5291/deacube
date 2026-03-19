@@ -1,5 +1,5 @@
 SHORT:
-- remove initial 10 second playing
+- (done) remove initial 10 second playing
 
 
 GENERAL:
