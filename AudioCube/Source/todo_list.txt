@@ -1,17 +1,25 @@
 SHORT:
-- (done) remove initial 10 second playing
-
 
 GENERAL:
-- add outlines to each tile to see the tiles. make the tiles squares.
-- (done) add some space between the tiles and the edges of the screen
+- create base bpm calculator
+- create user input for "root key" 
+- create user input (slider) for "bpm"
+- allow multiple notes to play at the same time
 
-- create dict to map tiles to frequencies
+- create drag/drop cube mechanic
+
+- create rhythm slider of certain cubes
+
+DONE:
+- create process to map tiles to frequencies
     - establish root ()
     - establish root's number (ie, A4 is 69 (440 hz))
     - follow list of semitone jumps for each row from the root. do this for a table (possible efficiency methods??)
-
     - once we have a table of semitone jumps, we translate each one to its corresponding hz
        through f = 440 x 2^([m-69]/12)
 
-- allow multiple notes to play at the same time
+- remove initial 10 second playing
+
+- add outlines to each tile to see the tiles. make the tiles squares.
+
+- add some space between the tiles and the edges of the screen

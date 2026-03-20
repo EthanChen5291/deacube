@@ -9,6 +9,9 @@
 
 GridComponent::GridComponent(TestSampler& s) : sampler(s) {
     tileStates.resize(144, false);
+
+    // EVENTUALLY ALLOW FOR CUSTOM KEYS
+    initializeFrequencyTable(59); // middle C in MIDI -> 60, but shifted to the left bc of calibration error
 }
 
 void GridComponent::mouseDown(const juce::MouseEvent& e) {
@@ -25,7 +28,7 @@ void GridComponent::mouseDown(const juce::MouseEvent& e) {
 
         tileStates[index] = !tileStates[index];
 
-        float hz = 440.0f; // eventually, make this a std::map where I can retrieve the hz with key [index]
+        float hz = tileFrequencies[index];
 
         sampler.generateSineWave(1, hz); // eventually generate time duration with bpm calculations
         sampler.trigger();
