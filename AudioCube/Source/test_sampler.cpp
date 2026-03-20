@@ -29,12 +29,12 @@ void TestSampler::processBlock(float* outputBuffer, int numSamples) {
 }
 
 void TestSampler::generateSineWave(int secDuration, float hz) {
+    std::cout << hz << std::endl;
     int totalSamples = (int)(DEFAULT_SAMPLE_RATE * secDuration);
     audioData.resize(totalSamples);
 
     for (int t = 0; t < (int)audioData.size(); ++t) {
-        int variedHz = (hz) * 0.25;
-        float sinVal = sinf((2.0f * PI) * variedHz * (static_cast<float>(t) / DEFAULT_SAMPLE_RATE));
-        audioData[t] = sinVal * 0.3f;
+        float sinVal = sinf((2.0f * PI) * hz * (static_cast<float>(t) / DEFAULT_SAMPLE_RATE));
+        audioData[t] = sinVal * 0.15f;
     }
 }
