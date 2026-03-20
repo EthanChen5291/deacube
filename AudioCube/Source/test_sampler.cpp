@@ -1,5 +1,5 @@
 #include "test_sampler.h"
-
+#include <iostream>
 #include <cmath>
 #include <numbers>
 

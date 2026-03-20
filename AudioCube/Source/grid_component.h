@@ -15,9 +15,14 @@ public:
 
     void mouseDown(const juce::MouseEvent& e) override;
 
+    void initializeFrequencyTable(int rootMIDI);
+
+    float toFrequency(int rootMIDI, int semitoneJump);
+
 private:
     TestSampler& sampler;
     std::vector<bool> tileStates;
+    float tileFrequencies[96];
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GridComponent)
 };
