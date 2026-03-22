@@ -1,0 +1,65 @@
+getLocalBounds(): get the current size of main window
+
+______
+
+JUCE::COMPONENT
+
+resized()	Called whenever the window changes size. This is where you calculate where your 144 squares should be.
+
+mouseDrag()	Like mouseDown, but triggers while you move the mouse. Perfect for "painting" colors onto your grid!
+
+mouseEnter()	Triggers when the mouse hovers over the grid. Good for showing a "highlight" square.
+
+setBounds()	How you tell a component where to sit on the screen and how big to be.
+
+isVisible()	A simple check to see if the component is currently hidden.
+
+______
+
+JUCE::COMPONENT
+
+g.fillAll(colour): Paints the entire background (like g.fillAll(juce::Colours::black)).
+
+g.fillRect(x, y, w, h): Draws a solid, filled-in rectangle.
+
+g.drawRect(x, y, w, h, thickness): Draws just the outline/border.
+
+g.setOpacity(float): Makes the next thing you draw see-through (0.0 to 1.0).
+
+g.drawText("Hello", ...): Draws strings of text.
+
+g.drawEllipse(...): 
+
+______
+
+JUCE Component
+
+addAndMakeVisible(child): The "Adoption." It tells the Window: 
+                        "This grid is now your child. Please draw it and pass 
+                        mouse clicks to it."
+
+setBounds(x, y, w, h)	The "Floor Plan." Without this, the child exists but has 
+                        a size of 0x0. You usually call this inside resized().
+
+removeFromDesktop(): The "Delete." Useful if you want a window to vanish.
+
+repaint()	The "Refresh." You call this when a variable changes (like a tile color) 
+            and you want the screen to update.
+
+______
+
+bufferToFill.clearActiveBufferRegion()
+
+Wipes the sandbox clean (sets everything to 0.0). 
+If you forget this, you might hear a "buzzing" sound from the previous 
+block of audio that was sitting in that RAM.
+
+bufferToFill.numSamples
+
+This is the Size of the sandbox. It changes depending on the user's sound settings, 
+so never hardcode "512"—always use this variable.
+
+shutdownAudio()
+
+You call this in the Destructor. It tells the Sound Card: "Stop yelling at me for numbers, 
+I'm going to sleep." If you don't call this, your app might crash when you close it.

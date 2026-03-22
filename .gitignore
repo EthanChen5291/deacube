@@ -1,0 +1,19 @@
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+
+# Visual Studio / C#
+*.csproj
+*.sln
+
+# Mac
+.DS_Store
+
+# JUCE
+build/
+bin/
+obj/
