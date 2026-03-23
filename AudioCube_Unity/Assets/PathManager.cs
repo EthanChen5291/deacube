@@ -89,7 +89,6 @@ public class PathManager : MonoBehaviour
 
     public void FinalizePath()
     {
-        Debug.Log("Finalize called!");
         int pathLength = currentPathTiles.Count;
         if (pathLength > GlobalClock.MasterBeatLength) GlobalClock.MasterBeatLength = (float)pathLength;
         GlobalClock.CurrentBeat = 0;
@@ -99,7 +98,7 @@ public class PathManager : MonoBehaviour
         foreach(var tile in currentPathTiles)
         {
             Vector3 nodePos = tile.transform.position + new Vector3(0, ProjectConfig.CubeHoverHeight, 0);
-            worldPositions.Add(nodePos);    
+            worldPositions.Add(nodePos);
         }
 
         activeCube.GetComponent<AudioCube>().SetPath(worldPositions);

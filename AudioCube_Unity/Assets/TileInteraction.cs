@@ -53,14 +53,6 @@ public class TileInteraction : MonoBehaviour
         StartCoroutine(AnimatePress());
     }
 
-    void OnTriggerEnter(Collider other) // for whenever paths are created
-    {
-        if (other.CompareTag("AudioCube"))
-        {
-            PlayNote();
-        }
-    }
-
     void OnMouseDown()
     {
         PlayNote();
