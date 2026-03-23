@@ -641,6 +641,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 55206689cb7754feb839901eb1365647, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GlobalClock
+  displayCurrentBeat: 0
 --- !u!4 &533990668
 Transform:
   m_ObjectHideFlags: 0
@@ -736,6 +737,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a6ccb30cc2aba4d13b6fa1af1af930f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIManager
+  pathManager: {fileID: 675835042}
   buttonText: {fileID: 1919787775}
 --- !u!114 &797025086
 MonoBehaviour:

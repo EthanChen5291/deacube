@@ -10,7 +10,7 @@ public static class ProjectConfig
     public const float CubeDropHeight = 5.0f;
     public const float CubeHoverHeight = 0.6f;
 
-    public static readonly int[,] baseSemitoneVariations = new int[7, 12]
+    public static readonly int[,] baseSemitoneVariations = new int[7, 12] // safe harmonic landscape
     {
         // Ab5 to G5
         {20, 24, 26, 27, 31, 32, 31, 27, 26, 24, 22, 19},
