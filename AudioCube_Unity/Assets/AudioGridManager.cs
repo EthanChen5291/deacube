@@ -1,8 +1,10 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class AudioGridManager : MonoBehaviour
 {
     public GameObject noteTemplate;
+    public List<TileInteraction> allTiles = new List<TileInteraction>();
 
     void Start()
     {
@@ -24,6 +26,12 @@ public class AudioGridManager : MonoBehaviour
                 tile.GetComponent<TileInteraction>().myFrequency = freq;
 
                 tile.transform.parent = this.transform;
+
+                tile.GetComponent<TileInteraction>().gridX = x;
+                tile.GetComponent<TileInteraction>().gridZ = z;
+                
+                TileInteraction script = tile.GetComponent<TileInteraction>();
+                allTiles.Add(script);
 
                 tile.name = $"Cube_{x}_{z}";
             }

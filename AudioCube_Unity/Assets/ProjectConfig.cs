@@ -7,6 +7,9 @@ public static class ProjectConfig
     public const int Rows = 7;
     public const float Spacing = 1.2f;
 
+    public const float CubeDropHeight = 5.0f;
+    public const float CubeHoverHeight = 0.6f;
+
     public static readonly int[,] baseSemitoneVariations = new int[7, 12]
     {
         // Ab5 to G5
