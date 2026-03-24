@@ -110,6 +110,8 @@ public class PathManager : MonoBehaviour
     public void FinalizePath()
     {
         int pathLength = currentPathTiles.Count;
+        
+        if (pathLength <= 0) return;
 
         if (pathLength > GlobalClock.MasterBeatLength) {
             GlobalClock.MasterBeatLength = (float)pathLength;
@@ -129,7 +131,7 @@ public class PathManager : MonoBehaviour
         activeCube.GetComponent<AudioCube>().SetPath(worldPositions);
 
         ClearAllHighlights();
-        
+
         currentPathTiles.Clear();
 
         isSettingPath = false;
