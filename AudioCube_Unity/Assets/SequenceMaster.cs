@@ -4,12 +4,9 @@ public class SequenceMaster : MonoBehaviour
 {
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.P))
-        {
-            TogglePlayback();
-        }
+        if (Input.GetKeyDown(KeyCode.P)) TogglePlayback();
 
-        if (!GlobalClock.IsPlaying || GlobalClock.MasterBeatLength == 0) return;
+        if (!GlobalClock.IsPlaying || GlobalClock.MasterBeatLength <= 0) return;
 
         float beatsPerSecond = GlobalClock.BPM / 60f;
         GlobalClock.CurrentBeat += beatsPerSecond * Time.deltaTime;
@@ -23,8 +20,6 @@ public class SequenceMaster : MonoBehaviour
 
     void ResetAllCubes()
     {
-        GlobalClock.CurrentBeat = 0f;
-
         AudioCube[] cubes = Object.FindObjectsByType<AudioCube>(FindObjectsInactive.Exclude);
         foreach(var c in cubes)
         {

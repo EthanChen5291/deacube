@@ -8,10 +8,12 @@ public class GlobalClock : MonoBehaviour
     public static float CurrentBeat = 0f;
     public static float MasterBeatLength = 4f;
 
-    [SerializeField] private float displayCurrentBeat;
+    [SerializeField] private float debugBeat;
+    [SerializeField] private float debugMasterLength;
 
     void Update()
     {
-        displayCurrentBeat = CurrentBeat;
+        debugBeat = CurrentBeat;
+        debugMasterLength = MasterBeatLength;
     }
 }
