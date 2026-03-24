@@ -25,7 +25,7 @@ public class UIManager : MonoBehaviour
             buttonText.text = "CANCEL";
             buttonText.color = Color.red;
         }
-        else
+        else //cancel button was pressed
         {
             pathManager.isSettingPath = false;
             pathManager.currentState = PathManager.EditorState.Idle;
