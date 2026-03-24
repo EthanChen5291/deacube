@@ -31,7 +31,17 @@ public class PathManager : MonoBehaviour
             Vector3 spawnPos = clickedTile.transform.position + new Vector3(0, ProjectConfig.CubeDropHeight, 0);
 
             activeCube = Instantiate(audioCube, spawnPos, Quaternion.identity);
+
+            Rigidbody rb = activeCube.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = false;
+                rb.useGravity = true;
+            }
+
             currentPathTiles.Add(clickedTile);
+
+            UpdateLiveMasterLength(currentPathTiles.Count);
 
             currentState = EditorState.DrawingPath;
             HighlightNeighbors(clickedTile);
@@ -44,6 +54,8 @@ public class PathManager : MonoBehaviour
             if (dist <= 1.75f && !currentPathTiles.Contains(clickedTile))
             {
                 currentPathTiles.Add(clickedTile);
+
+                UpdateLiveMasterLength(currentPathTiles.Count);
 
                 List<Vector3> pathPositions = new List<Vector3>();
                 foreach(var tile in currentPathTiles)
@@ -62,6 +74,14 @@ public class PathManager : MonoBehaviour
         }
 
     }
+
+    private void UpdateLiveMasterLength(int length)
+{
+    if ((float)length > GlobalClock.MasterBeatLength)
+    {
+        GlobalClock.MasterBeatLength = (float)length;
+    }
+}
 
     IEnumerator AnimateCubeMove(GameObject cubeToMove, TileInteraction clickedTile)
     {
@@ -90,7 +110,12 @@ public class PathManager : MonoBehaviour
     public void FinalizePath()
     {
         int pathLength = currentPathTiles.Count;
-        if (pathLength > GlobalClock.MasterBeatLength) GlobalClock.MasterBeatLength = (float)pathLength;
+
+        if (pathLength > GlobalClock.MasterBeatLength) {
+            GlobalClock.MasterBeatLength = (float)pathLength;
+            Debug.Log($"<color=green>New Master Beat Length: {GlobalClock.MasterBeatLength}</color>");
+        }
+
         GlobalClock.CurrentBeat = 0;
 
         List<Vector3> worldPositions = new List<Vector3>();
