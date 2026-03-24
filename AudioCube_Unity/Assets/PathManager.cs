@@ -10,7 +10,7 @@ public class PathManager : MonoBehaviour
 
     // tiles
     public List<TileInteraction> currentPathTiles = new List<TileInteraction>();
-    private List<TileInteraction> allTiles;
+    public List<TileInteraction> allTiles;
 
     //cube attributes
     public GameObject audioCube;
@@ -76,12 +76,12 @@ public class PathManager : MonoBehaviour
     }
 
     private void UpdateLiveMasterLength(int length)
-{
-    if ((float)length > GlobalClock.MasterBeatLength)
     {
-        GlobalClock.MasterBeatLength = (float)length;
+        if ((float)length > GlobalClock.MasterBeatLength)
+        {
+            GlobalClock.MasterBeatLength = (float)length;
+        }
     }
-}
 
     IEnumerator AnimateCubeMove(GameObject cubeToMove, TileInteraction clickedTile)
     {
@@ -128,6 +128,8 @@ public class PathManager : MonoBehaviour
 
         activeCube.GetComponent<AudioCube>().SetPath(worldPositions);
 
+        ClearAllHighlights();
+        
         currentPathTiles.Clear();
 
         isSettingPath = false;
@@ -146,6 +148,16 @@ public class PathManager : MonoBehaviour
             {
                 t.SetColor(Color.yellow);
             }
+        }
+    }
+
+    public void ClearAllHighlights()
+    {
+        if (allTiles == null) return;
+
+        foreach(var tile in allTiles)
+        {
+            tile.ResetColor();
         }
     }
 }
