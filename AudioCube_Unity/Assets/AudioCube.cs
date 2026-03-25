@@ -9,6 +9,7 @@ public class AudioCube : MonoBehaviour
     public bool isReadyToPlay = false;
 
     private int lastIndex = -1;
+    private bool hasReturned = false;
 
     void Start()
     {
@@ -18,6 +19,12 @@ public class AudioCube : MonoBehaviour
     void Update()
     {
         if (!GlobalClock.IsPlaying || pathNodes.Count < 2) return;
+
+        if (GlobalClock.CurrentBeat < 0.1f) 
+        {
+                hasReturned = false;
+                lastIndex = -1;
+        }
 
         if (!isReadyToPlay)
         {
@@ -42,19 +49,38 @@ public class AudioCube : MonoBehaviour
 
         if (indexA >= pathNodes.Count - 1) // lerp to beginning? not sure
         {
-            float beatsPast = currentBeat - indexA;
-            float percentToFirstTile = Mathf.Clamp(beatsPast, 0, 1);
+
+            if (hasReturned) 
+            {
+                transform.position = pathNodes[0];
+                transform.rotation = Quaternion.identity;
+                return;
+            }
+
+            float beatsPast = currentBeat - (pathNodes.Count - 1);
+            float delay = (1f - ProjectConfig.snapThreshold)/2; 
+            float returnDuration = 1.0f;
+
+            float percentToFirstTile = Mathf.Clamp((beatsPast - delay) / returnDuration, 0, 1);
+
+            if (percentToFirstTile >= 1.0f) hasReturned = true;
 
             float smoothProgress = Mathf.SmoothStep(0, 1, percentToFirstTile);
 
-            if (indexA < pathNodes.Count)
+            Vector3 endTile = pathNodes[pathNodes.Count - 1];
+            Vector3 startTile = pathNodes[0];
+
+
+            if (percentToFirstTile <= 0)
             {
-                Vector3 basePos = Vector3.Lerp(pathNodes[pathNodes.Count - 1], pathNodes[0], smoothProgress);
-
+                transform.position = endTile;
+                transform.rotation = Quaternion.identity; 
+            }
+            else
+            {
+                Vector3 basePos = Vector3.Lerp(endTile, startTile, smoothProgress);
                 float hopY = Mathf.Sin(smoothProgress * Mathf.PI) * ProjectConfig.cubeHopIntensity;
-
                 transform.position = basePos + new Vector3(0, hopY, 0);
-
                 transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.identity, smoothProgress);
             }
             return;
@@ -112,8 +138,12 @@ public class AudioCube : MonoBehaviour
         TileInteraction tile = hit.collider.GetComponent<TileInteraction>();
         if (tile != null)
             {
+            var allCubes = Object.FindObjectsByType<AudioCube>();
+            int n = allCubes.Length;
+
+            float individualVolume = ProjectConfig.MaxSystemVolume / Mathf.Max(1, n);
+
             tile.PlayNote();
-            
             //StartCoroutine(FlashTile(tile));
             }
         }
