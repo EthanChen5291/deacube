@@ -49,11 +49,11 @@ public class AudioCube : MonoBehaviour
 
             if (indexA < pathNodes.Count)
             {
-                transform.position = Vector3.Lerp(
-                    pathNodes[pathNodes.Count - 1],
-                    pathNodes[0],
-                    smoothProgress
-                );
+                Vector3 basePos = Vector3.Lerp(pathNodes[pathNodes.Count - 1], pathNodes[0], smoothProgress);
+
+                float hopY = Mathf.Sin(smoothProgress * Mathf.PI) * ProjectConfig.cubeHopIntensity;
+
+                transform.position = basePos + new Vector3(0, hopY, 0);
 
                 transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.identity, smoothProgress);
             }
