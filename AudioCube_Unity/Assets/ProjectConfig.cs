@@ -37,6 +37,7 @@ public static class ProjectConfig
     // audio
     public const float refFreq = 261.63f; // C4 wav file
 
-    public const float snapThreshold = 0.6f;
+    public const float snapThreshold = 0.6f; // the cube begins moving after 60% of the beat
+    public const float cubeHopIntensity = 0.25f;
 
 }

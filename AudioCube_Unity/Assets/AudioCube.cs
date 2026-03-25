@@ -71,12 +71,14 @@ public class AudioCube : MonoBehaviour
         {
             float flipPercent = (percentToNextTile - ProjectConfig.snapThreshold) / (1.0f - ProjectConfig.snapThreshold);
 
-            transform.position = Vector3.Lerp(
-                pathNodes[indexA],
-                pathNodes[indexB],
-                flipPercent
-            );
+            // cube "jump"
+            Vector3 basePos = Vector3.Lerp(pathNodes[indexA], pathNodes[indexB], flipPercent);
 
+            float hopY = Mathf.Sin(flipPercent * Mathf.PI) * ProjectConfig.cubeHopIntensity;
+
+            transform.position = basePos + new Vector3(0, hopY, 0);
+
+            // cube rotation
             Vector3 movementDir = (pathNodes[indexB] - pathNodes[indexA]).normalized;
 
             Vector3 axisOfRotation = Vector3.Cross(Vector3.up, movementDir);
