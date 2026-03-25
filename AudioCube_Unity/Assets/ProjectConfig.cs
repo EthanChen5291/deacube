@@ -37,4 +37,6 @@ public static class ProjectConfig
     // audio
     public const float refFreq = 261.63f; // C4 wav file
 
+    public const float snapThreshold = 0.6f;
+
 }
