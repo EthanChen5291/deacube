@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 
 public class AudioCube : MonoBehaviour
@@ -39,20 +40,56 @@ public class AudioCube : MonoBehaviour
             }   
         }
 
-        if (indexA >= pathNodes.Count - 1)
+        if (indexA >= pathNodes.Count - 1) // lerp to beginning? not sure
         {
-            transform.position = pathNodes[pathNodes.Count - 1];
+            float beatsPast = currentBeat - indexA;
+            float percentToFirstTile = Mathf.Clamp(beatsPast, 0, 1);
+
+            float smoothProgress = Mathf.SmoothStep(0, 1, percentToFirstTile);
+
+            if (indexA < pathNodes.Count)
+            {
+                transform.position = Vector3.Lerp(
+                    pathNodes[pathNodes.Count - 1],
+                    pathNodes[0],
+                    smoothProgress
+                );
+
+                transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.identity, smoothProgress);
+            }
             return;
         }
 
         int indexB = indexA + 1;
         float percentToNextTile = currentBeat - indexA;
 
-        transform.position = Vector3.Lerp(
-            pathNodes[indexA],
-            pathNodes[indexB],
-            percentToNextTile
-        );
+        if (percentToNextTile < ProjectConfig.snapThreshold)
+        {
+            transform.position = pathNodes[indexA];
+        } 
+        else
+        {
+            float flipPercent = (percentToNextTile - ProjectConfig.snapThreshold) / (1.0f - ProjectConfig.snapThreshold);
+
+            transform.position = Vector3.Lerp(
+                pathNodes[indexA],
+                pathNodes[indexB],
+                flipPercent
+            );
+
+            Vector3 movementDir = (pathNodes[indexB] - pathNodes[indexA]).normalized;
+
+            Vector3 axisOfRotation = Vector3.Cross(Vector3.up, movementDir);
+
+            float distance = Vector3.Distance(pathNodes[indexA], pathNodes[indexB]);
+
+            float rotationDegrees = distance > 1f ? -180f : 90f;
+
+            Quaternion targetRotation = Quaternion.AngleAxis(rotationDegrees, axisOfRotation);
+
+            transform.rotation = Quaternion.Lerp(Quaternion.identity, targetRotation, flipPercent);
+        }
+
     }
 
     private void OnCollisionEnter(Collision collision)

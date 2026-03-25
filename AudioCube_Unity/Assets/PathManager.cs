@@ -51,7 +51,7 @@ public class PathManager : MonoBehaviour
             TileInteraction lastTile = currentPathTiles[currentPathTiles.Count - 1];
             float dist = Vector3.Distance(clickedTile.transform.position, lastTile.transform.position);
             
-            if (dist <= 1.75f && !currentPathTiles.Contains(clickedTile))
+            if (dist <= 1.75f)
             {
                 currentPathTiles.Add(clickedTile);
 
@@ -115,7 +115,7 @@ public class PathManager : MonoBehaviour
 
         if (pathLength > GlobalClock.MasterBeatLength) {
             GlobalClock.MasterBeatLength = (float)pathLength;
-            Debug.Log($"<color=green>New Master Beat Length: {GlobalClock.MasterBeatLength}</color>");
+            Debug.Log($"master beat length: {GlobalClock.MasterBeatLength}");
         }
 
         GlobalClock.CurrentBeat = 0;
@@ -146,7 +146,7 @@ public class PathManager : MonoBehaviour
             int dx = Mathf.Abs(t.gridX - centerTile.gridX);
             int dz = Mathf.Abs(t.gridZ - centerTile.gridZ);
 
-            if (dx <= 1 && dz <= 1 && t != centerTile && !currentPathTiles.Contains(t))
+            if (dx <= 1 && dz <= 1) //&& t != centerTile && !currentPathTiles.Contains(t)
             {
                 t.SetColor(Color.yellow);
             }
