@@ -7,7 +7,13 @@ public static class ProjectConfig
     public const int Rows = 7;
     public const float Spacing = 1.2f;
 
-    public static readonly int[,] baseSemitoneVariations = new int[7, 12]
+    // cube mechanics
+    public const float CubeDropHeight = 2.0f;
+    public const float CubeHoverHeight = 0.6f;
+    public const float snapThreshold = 0.6f; // the cube begins moving after 60% of the beat
+    public const float cubeHopIntensity = 0.25f;
+
+    public static readonly int[,] baseSemitoneVariations = new int[7, 12] // safe harmonic landscape
     {
         // Ab5 to G5
         {20, 24, 26, 27, 31, 32, 31, 27, 26, 24, 22, 19},
@@ -34,4 +40,5 @@ public static class ProjectConfig
     // audio
     public const float refFreq = 261.63f; // C4 wav file
 
+    public const float MaxSystemVolume = 0.8f;
 }
