@@ -21,44 +21,61 @@ public class TileInteraction : MonoBehaviour
     public float returnSpeed = 8f;
 
     // audio
-    private AudioSource audioSource;
     public float myFrequency;
+
+    [Header("Audio Clips")]
+    public AudioClip previewClip;
+    public AudioSource audioSource;
 
     void Start()
     {
         initialPosition = transform.position;
-        audioSource = GetComponent<AudioSource>();
         pathManager = Object.FindAnyObjectByType<PathManager>();
+
+        if (audioSource == null) audioSource = GetComponent<AudioSource>();
 
         mat = GetComponent<Renderer>().material;
         originalColor = mat.color;
     }
 
-    public void ResetColor()
-    {
-        mat.color = originalColor;
-    }
+    public void ResetColor() => mat.color = originalColor;
+    public void SetColor(Color newCol) => mat.color = newCol;
 
-    public void SetColor(Color newCol)
+    public float GetPitch()
     {
-        mat.color = newCol;
+        return myFrequency / ProjectConfig.refFreq;
     }
 
     public void PlayNote()
     {
-        audioSource.pitch = myFrequency / ProjectConfig.refFreq;
-        audioSource.Play();
+        audioSource.pitch = GetPitch();
+        AudioClip currentInstrumentClip = pathManager.GetSelectedAudioSource().clip;
+        audioSource.PlayOneShot(currentInstrumentClip);
 
+        StopAllCoroutines();
+        StartCoroutine(AnimatePress());
+    }
+
+    public void PlayPreviewNote()
+    {
+        audioSource.pitch = GetPitch();
+        audioSource.PlayOneShot(previewClip);
+        
         StopAllCoroutines();
         StartCoroutine(AnimatePress());
     }
 
     void OnMouseDown()
     {
-        PlayNote();
         if (pathManager.isSettingPath)
         {
             pathManager.OnTileClicked(this);
+
+            PlayNote();
+        } 
+        else
+        {
+            PlayPreviewNote();
         }
     }
 
@@ -99,10 +116,5 @@ public class TileInteraction : MonoBehaviour
         transform.position = initialPosition;
 
         ResetColor();
-
-        if (audioSource != null && audioSource.isPlaying)
-        {
-            audioSource.Stop();
-        }
     }
 }

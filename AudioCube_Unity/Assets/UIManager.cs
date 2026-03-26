@@ -39,6 +39,10 @@ public class UIManager : MonoBehaviour
 
     public void ResetPaths()
     {
+        if (pathManager.isSettingPath)
+        {
+            TogglePathMode();
+        }
         pathManager.ClearAllPaths();
     }
 }

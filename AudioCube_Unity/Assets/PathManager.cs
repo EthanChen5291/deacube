@@ -8,6 +8,11 @@ public class PathManager : MonoBehaviour
     public enum EditorState {Idle, PlacingStart, DrawingPath}
     public EditorState currentState = EditorState.Idle;
 
+    // instrument/cube selection
+    [Header("Instrument Palette")] 
+    public List<GameObject> cubePrefabs; // color prefabs
+    private int selectedInstrumentIndex = 0;
+
     // tiles
     public List<TileInteraction> currentPathTiles = new List<TileInteraction>();
     public List<TileInteraction> allTiles;
@@ -24,13 +29,29 @@ public class PathManager : MonoBehaviour
         if (gridManager != null) allTiles = gridManager.allTiles;
     }
 
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Alpha1)) selectInstrument(0);
+        if (Input.GetKeyDown(KeyCode.Alpha2)) selectInstrument(1);
+        if (Input.GetKeyDown(KeyCode.Alpha3)) selectInstrument(2);
+        if (Input.GetKeyDown(KeyCode.Alpha4)) selectInstrument(3);
+        if (Input.GetKeyDown(KeyCode.Alpha5)) selectInstrument(4);
+        if (Input.GetKeyDown(KeyCode.Alpha6)) selectInstrument(5);
+    }
+
+    public void selectInstrument(int index)
+    {
+        selectedInstrumentIndex = Mathf.Clamp(index, 0, cubePrefabs.Count - 1);
+    }
+
     public void OnTileClicked(TileInteraction clickedTile)
     {
         if (currentState == EditorState.PlacingStart)
         {
             Vector3 spawnPos = clickedTile.transform.position + new Vector3(0, ProjectConfig.CubeDropHeight, 0);
 
-            activeCube = Instantiate(audioCube, spawnPos, Quaternion.identity);
+            GameObject selectedPrefab = cubePrefabs[selectedInstrumentIndex];
+            activeCube = Instantiate(selectedPrefab, spawnPos, Quaternion.identity);
 
             Rigidbody rb = activeCube.GetComponent<Rigidbody>();
             if (rb != null)
@@ -182,6 +203,11 @@ public class PathManager : MonoBehaviour
         GlobalClock.MasterBeatLength = 4f;
         GlobalClock.CurrentBeat = 0f;
         GlobalClock.IsPlaying = false;
+    }
+
+    public AudioSource GetSelectedAudioSource()
+    {
+        return cubePrefabs[selectedInstrumentIndex].GetComponent<AudioSource>();;
     }
 }
 
