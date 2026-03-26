@@ -3,21 +3,48 @@ using System.Collections;
 
 public class TileInteraction : MonoBehaviour
 {
+    // grid coordinates
+    public int gridX;
+    public int gridZ;
     private Vector3 initialPosition;
+
+    // path logic
+    private PathManager pathManager;
+
+    // visuals
+    private Color originalColor;
+    private Material mat;
+
+    // movement physics
     public float pressDepth = 0.2f;
     public float pressSpeed = 20f;
     public float returnSpeed = 8f;
 
-    public float myFrequency;
+    // audio
     private AudioSource audioSource;
+    public float myFrequency;
 
     void Start()
     {
         initialPosition = transform.position;
         audioSource = GetComponent<AudioSource>();
+        pathManager = Object.FindAnyObjectByType<PathManager>();
+
+        mat = GetComponent<Renderer>().material;
+        originalColor = mat.color;
     }
 
-    void PlayNote()
+    public void ResetColor()
+    {
+        mat.color = originalColor;
+    }
+
+    public void SetColor(Color newCol)
+    {
+        mat.color = newCol;
+    }
+
+    public void PlayNote()
     {
         audioSource.pitch = myFrequency / ProjectConfig.refFreq;
         audioSource.Play();
@@ -26,17 +53,13 @@ public class TileInteraction : MonoBehaviour
         StartCoroutine(AnimatePress());
     }
 
-    void OnTriggerEnter(Collider other) // for whenever paths are created
-    {
-        if (other.CompareTag("AudioCube"))
-        {
-            PlayNote();
-        }
-    }
-
     void OnMouseDown()
     {
         PlayNote();
+        if (pathManager.isSettingPath)
+        {
+            pathManager.OnTileClicked(this);
+        }
     }
 
     IEnumerator AnimatePress()
@@ -67,5 +90,19 @@ public class TileInteraction : MonoBehaviour
         }
 
         transform.position = initialPosition;
+    }
+
+    public void ResetTile()
+    {
+        StopAllCoroutines();
+
+        transform.position = initialPosition;
+
+        ResetColor();
+
+        if (audioSource != null && audioSource.isPlaying)
+        {
+            audioSource.Stop();
+        }
     }
 }

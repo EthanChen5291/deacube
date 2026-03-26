@@ -1,8 +1,10 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class AudioGridManager : MonoBehaviour
 {
     public GameObject noteTemplate;
+    public List<TileInteraction> allTiles = new List<TileInteraction>();
 
     void Start()
     {
@@ -25,6 +27,12 @@ public class AudioGridManager : MonoBehaviour
 
                 tile.transform.parent = this.transform;
 
+                tile.GetComponent<TileInteraction>().gridX = x;
+                tile.GetComponent<TileInteraction>().gridZ = z;
+                
+                TileInteraction script = tile.GetComponent<TileInteraction>();
+                allTiles.Add(script);
+
                 tile.name = $"Cube_{x}_{z}";
             }
         }
@@ -36,7 +44,7 @@ public class AudioGridManager : MonoBehaviour
         float frequency = ProjectConfig.refFreq * Mathf.Pow(2f, semitones / 12f);
 
         if (z == 0 && x == 0) {
-            Debug.Log($"Cube 0,0: Semitones: {semitones}, Target Freq: {frequency}");
+            Debug.Log($"cube 0,0: semitones: {semitones}, target freq: {frequency}");
         }
 
         return frequency;
