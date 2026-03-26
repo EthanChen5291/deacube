@@ -825,6 +825,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PathManager
   currentState: 0
+  cubePrefabs:
+  - {fileID: 1693953341322733758, guid: a2f74a8a636bb4765ad476df615900e4, type: 3}
+  - {fileID: 1693953341322733758, guid: 56ac32db9f82449019da0a214856bb0c, type: 3}
+  - {fileID: 1693953341322733758, guid: 490d50fa0f49d459fbd8771bcb66fb21, type: 3}
+  - {fileID: 1693953341322733758, guid: 62309b2c25a394619b67ad6e2c8b13b5, type: 3}
+  - {fileID: 1693953341322733758, guid: 8940712c8d05747e48088d88058735ec, type: 3}
+  - {fileID: 1693953341322733758, guid: 35f48799482ef453d80583e1d999266b, type: 3}
   currentPathTiles: []
   allTiles: []
   audioCube: {fileID: 1693953341322733758, guid: a2f74a8a636bb4765ad476df615900e4, type: 3}

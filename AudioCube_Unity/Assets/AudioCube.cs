@@ -9,10 +9,14 @@ public class AudioCube : MonoBehaviour
     public bool isReadyToPlay = false;
 
     private int lastIndex = -1;
+    private float lastBeatTracker = -1f;
     private bool hasReturned = false;
+
+    private AudioSource myAudio;
 
     void Start()
     {
+        myAudio = GetComponent<AudioSource>();
         startPos = transform.position;
     }
 
@@ -20,11 +24,16 @@ public class AudioCube : MonoBehaviour
     {
         if (!GlobalClock.IsPlaying || pathNodes.Count < 2) return;
 
-        if (GlobalClock.CurrentBeat < 0.1f) 
+        float currentBeat = GlobalClock.CurrentBeat;
+
+        if (currentBeat < lastBeatTracker) 
         {
-                hasReturned = false;
-                lastIndex = -1;
+            hasReturned = false;
+            lastIndex = -1;
+            isReadyToPlay = true; 
         }
+        
+        lastBeatTracker = currentBeat;
 
         if (!isReadyToPlay)
         {
@@ -32,7 +41,6 @@ public class AudioCube : MonoBehaviour
             return;
         }
 
-        float currentBeat = GlobalClock.CurrentBeat;
         int indexA = Mathf.FloorToInt(currentBeat);
 
         if (indexA < pathNodes.Count)
@@ -132,19 +140,23 @@ public class AudioCube : MonoBehaviour
 
     void TriggerTileSound(int index)
     {
-    RaycastHit hit;
-    if (Physics.Raycast(transform.position, Vector3.down, out hit, 2.0f))
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position, Vector3.down, out hit, 2.0f))
         {
-        TileInteraction tile = hit.collider.GetComponent<TileInteraction>();
-        if (tile != null)
+            TileInteraction tile = hit.collider.GetComponent<TileInteraction>();
+            if (tile != null)
             {
-            var allCubes = Object.FindObjectsByType<AudioCube>();
-            int n = allCubes.Length;
+                var allCubes = Object.FindObjectsByType<AudioCube>();
+                int n = allCubes.Length;
+                //float individualVolume = ProjectConfig.MaxSystemVolume / Mathf.Max(1, n);
 
-            float individualVolume = ProjectConfig.MaxSystemVolume / Mathf.Max(1, n);
+                if (myAudio != null)
+                {
+                    myAudio.pitch = tile.myFrequency / ProjectConfig.refFreq;
+                    //myAudio.volume = individualVolume;
 
-            tile.PlayNote();
-            //StartCoroutine(FlashTile(tile));
+                    myAudio.PlayOneShot(myAudio.clip);
+                }
             }
         }
     }

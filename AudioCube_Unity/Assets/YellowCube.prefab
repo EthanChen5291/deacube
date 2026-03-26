@@ -14,9 +14,9 @@ GameObject:
   - component: {fileID: 1608083133576090839}
   - component: {fileID: -8857493469460628667}
   - component: {fileID: 6228788906699926643}
-  - component: {fileID: 5189619173032718099}
+  - component: {fileID: 79745856964654114}
   m_Layer: 0
-  m_Name: BlueCube
+  m_Name: YellowCube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -70,7 +70,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: b95924fc85cb64e79a24afd0de09e511, type: 2}
+  - {fileID: 2100000, guid: 87b9001191cf247ea90cd8849c40bfbf, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -156,7 +156,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AudioCube
   pathNodes: []
   isReadyToPlay: 0
---- !u!82 &5189619173032718099
+--- !u!82 &79745856964654114
 AudioSource:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -167,9 +167,9 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: 725786f0ce3b44d0cb0b7f0f0da1dad7, type: 3}
-  m_PlayOnAwake: 0
-  m_Volume: 0.598
+  m_Resource: {fileID: 8300000, guid: 339f983dd65bc41519c4776fd66b163c, type: 3}
+  m_PlayOnAwake: 1
+  m_Volume: 1
   m_Pitch: 1
   Loop: 0
   Mute: 0
