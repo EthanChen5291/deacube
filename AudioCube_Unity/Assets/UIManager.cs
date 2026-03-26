@@ -33,7 +33,12 @@ public class UIManager : MonoBehaviour
             pathManager.FinalizePath();
 
             buttonText.text = "DRAW PATH";
-            buttonText.color = Color.white;
+            buttonText.color = Color.black;
         }
+    }
+
+    public void ResetPaths()
+    {
+        pathManager.ClearAllPaths();
     }
 }

@@ -44,7 +44,7 @@ public class AudioGridManager : MonoBehaviour
         float frequency = ProjectConfig.refFreq * Mathf.Pow(2f, semitones / 12f);
 
         if (z == 0 && x == 0) {
-            Debug.Log($"Cube 0,0: Semitones: {semitones}, Target Freq: {frequency}");
+            Debug.Log($"cube 0,0: semitones: {semitones}, target freq: {frequency}");
         }
 
         return frequency;

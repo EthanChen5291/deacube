@@ -162,4 +162,26 @@ public class PathManager : MonoBehaviour
             tile.ResetColor();
         }
     }
+
+    public void ClearAllPaths()
+    {
+        AudioCube[] allCubes = Object.FindObjectsByType<AudioCube>(FindObjectsSortMode.None);
+        foreach(var cube in allCubes)
+        {
+            Destroy(cube.gameObject);
+        }
+
+        currentPathTiles.Clear();
+
+        TileInteraction[] allTiles = Object.FindObjectsByType<TileInteraction>(FindObjectsSortMode.None);
+        foreach(var tile in allTiles)
+        {
+            tile.ResetTile();
+        }
+
+        GlobalClock.MasterBeatLength = 4f;
+        GlobalClock.CurrentBeat = 0f;
+        GlobalClock.IsPlaying = false;
+    }
 }
+
