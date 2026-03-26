@@ -91,4 +91,18 @@ public class TileInteraction : MonoBehaviour
 
         transform.position = initialPosition;
     }
+
+    public void ResetTile()
+    {
+        StopAllCoroutines();
+
+        transform.position = initialPosition;
+
+        ResetColor();
+
+        if (audioSource != null && audioSource.isPlaying)
+        {
+            audioSource.Stop();
+        }
+    }
 }
