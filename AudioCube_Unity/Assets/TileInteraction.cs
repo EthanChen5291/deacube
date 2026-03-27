@@ -117,4 +117,9 @@ public class TileInteraction : MonoBehaviour
 
         ResetColor();
     }
+
+    public void SetNote(float frequency)
+    {
+        myFrequency = frequency;
+    }
 }

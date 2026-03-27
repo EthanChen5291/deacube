@@ -6,6 +6,7 @@ public static class ProjectConfig
     public const int Cols = 12;
     public const int Rows = 7;
     public const float Spacing = 1.2f;
+    public const float gridSpacing = 20f;
 
     // cube mechanics
     public const float CubeDropHeight = 2.0f;
@@ -38,6 +39,7 @@ public static class ProjectConfig
     };
 
     // audio
+    public const int refMIDI = 60; // C4 wav file
     public const float refFreq = 261.63f; // C4 wav file
 
     public const float MaxSystemVolume = 0.8f;

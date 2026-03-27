@@ -33,7 +33,7 @@ public class AudioGridManager : MonoBehaviour
                 TileInteraction script = tile.GetComponent<TileInteraction>();
                 allTiles.Add(script);
 
-                tile.name = $"Cube_{x}_{z}";
+                tile.name = $"Tile_{x}_{z}";
             }
         }
     }
