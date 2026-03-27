@@ -10,6 +10,7 @@ public class SequenceMaster : MonoBehaviour
 
         float beatsPerSecond = GlobalClock.BPM / 60f;
         GlobalClock.CurrentBeat += beatsPerSecond * Time.deltaTime;
+        GlobalClock.SongBeat += beatsPerSecond * Time.deltaTime;
         
         if (GlobalClock.CurrentBeat >= GlobalClock.MasterBeatLength)
         {

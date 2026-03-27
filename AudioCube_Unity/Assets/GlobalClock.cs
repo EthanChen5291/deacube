@@ -5,7 +5,8 @@ public class GlobalClock : MonoBehaviour
     public static bool IsPlaying = false;
     public static float BPM = 180f;
 
-    public static float CurrentBeat = 0f;
+    public static float SongBeat = 0f;
+    public static float CurrentBeat = 0f; //resets every grid
     public static float MasterBeatLength = 4f;
 
     [SerializeField] private float debugBeat;

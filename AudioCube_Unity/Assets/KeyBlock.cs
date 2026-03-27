@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-public class MeasureBlock : MonoBehaviour
+public class KeyBlock : MonoBehaviour
 {
     public int measureIndex;
     public string assignedChord;
@@ -33,7 +33,7 @@ public class MeasureBlock : MonoBehaviour
         }
     }
 
-    public void initializeTileGrid(Vector3 offset) {
+    public void initializeTileGrid() {
         for (int x = 0; x < gridWidth; x++)
         {
             for (int z = 0; z < gridHeight; z++) // do 4 for now of repeated chords but eventually will find alternative "safe" chords
