@@ -17,4 +17,11 @@ public class GlobalClock : MonoBehaviour
         debugBeat = CurrentBeat;
         debugMasterLength = MasterBeatLength;
     }
+
+    public static void ResetClock()
+    {
+        CurrentBeat = 0f;
+        MasterBeatLength = 4f;
+        SongBeat = 0f;
+    }
 }

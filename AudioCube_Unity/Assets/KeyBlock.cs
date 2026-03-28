@@ -5,9 +5,11 @@ public class KeyBlock : MonoBehaviour
 {
     public int measureIndex;
     public string assignedChord;
-    public int gridWidth = 4; //eventually change this 
-    public int gridHeight = 4; // depends on the chord right?
+    public int chordRootMIDI;
+    public int chordHeight; // depends on the chord right?
     public List<int> semitoneList; // left to right
+
+    public float startBeatOffset;
 
     public Transform tilesContainer;
     public GameObject noteTemplate;
@@ -20,23 +22,30 @@ public class KeyBlock : MonoBehaviour
     {
         measureIndex = data.index;
         assignedChord = data.chordKey;
+        chordRootMIDI = data.chordRootMIDI;
+
+        if (chordRootMIDI < 40) 
+        {
+            chordRootMIDI += 60; 
+        }
 
         semitoneList = new List<int>(data.semitones);
-
-        initializeTileGrid();
+        chordHeight = semitoneList.Count;
+        
+        initializeInversionGrid();
     }
-    void Awake()
+
+    public void initializeInversionGrid() 
     {
-        if (HarmonicLibrary.Chords[assignedChord] != null)
-        {
-            semitoneList = HarmonicLibrary.Chords[assignedChord];   
-        }
-    }
+        semitoneList.Sort();
 
-    public void initializeTileGrid() {
-        for (int x = 0; x < gridWidth; x++)
+        List<int> currentInversion = new List<int>(semitoneList);
+
+        for (int x = 0; x < ProjectConfig.numInversions; x++)
         {
-            for (int z = 0; z < gridHeight; z++) // do 4 for now of repeated chords but eventually will find alternative "safe" chords
+            if (x > 0) currentInversion = getInversion(currentInversion);
+            
+            for (int z = 0; z < chordHeight; z++) // do 4 for now of repeated chords but eventually will find alternative "safe" chords
             {
                 Vector3 localPos = new Vector3(x * ProjectConfig.Spacing, 0 , z * ProjectConfig.Spacing);
                 Vector3 spawnPos = transform.position + localPos;
@@ -46,10 +55,10 @@ public class KeyBlock : MonoBehaviour
 
                 TileInteraction script = tile.GetComponent<TileInteraction>();
 
-                if (z < semitoneList.Count)
+                if (z < currentInversion.Count)
                 {
-                    int semitones = semitoneList[z];
-                    script.myFrequency = HarmonicLibrary.getFrequencyFromOffset(ProjectConfig.refMIDI, semitones);
+                    int absoluteMIDI = chordRootMIDI + currentInversion[z];
+                    script.myFrequency = HarmonicLibrary.getFrequencyFromMIDI(absoluteMIDI);
                 }
 
                 script.gridX = x;
@@ -60,5 +69,17 @@ public class KeyBlock : MonoBehaviour
                 tile.name = $"Tile_{measureIndex}_{x}_{z}";
             }
         }
+    }
+
+    public List<int> getInversion(List<int> semitones)
+    {
+        List<int> result = new List<int>(semitones);
+        
+        int lowNote = result[0];
+        result.Add(lowNote + 12);
+        result.RemoveAt(0);
+
+        result.Sort();
+        return result;
     }
 }
