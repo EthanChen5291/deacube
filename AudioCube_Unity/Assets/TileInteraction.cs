@@ -3,13 +3,14 @@ using System.Collections;
 
 public class TileInteraction : MonoBehaviour
 {
+    [Header("References")]
+    private SongManager songManager;
+    private KeyBlock keyBlock;
+    private PathManager pathManager;
     // grid coordinates
     public int gridX;
     public int gridZ;
     private Vector3 initialPosition;
-
-    // path logic
-    private PathManager pathManager;
 
     // visuals
     private Color originalColor;

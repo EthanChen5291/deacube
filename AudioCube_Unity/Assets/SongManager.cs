@@ -14,6 +14,7 @@ public class SongManager : MonoBehaviour
     {
         public int index;
         public string chordKey;
+        public int chordRootMIDI;
         public int[] semitones;
         public float measureDuration;
     }
@@ -23,6 +24,7 @@ public class SongManager : MonoBehaviour
     {
         public string songName;
         public int bpm;
+        public string timeSignature;
         public MeasureData[] measures;
     }
 
@@ -36,8 +38,11 @@ public class SongManager : MonoBehaviour
     [Header("Settings")]
     public float cameraPanSpeed = 5f;
 
+    // beats
     private List<float> gridStartBeats = new List<float>();
     private float totalSongBeats = 0f;
+    public int beatsPerMeasure;
+    public int beatValue;
 
     private List<KeyBlock> spawnedBlocks = new List<KeyBlock>();
 
@@ -62,6 +67,14 @@ public class SongManager : MonoBehaviour
         {
             GlobalClock.BPM = currentSongData.bpm;
             InitializeSongGrids();
+
+
+            if (!string.IsNullOrEmpty(currentSongData.timeSignature) && currentSongData.timeSignature.Contains("/"))
+            {            
+                string[] parts = currentSongData.timeSignature.Split('/');
+                beatsPerMeasure = int.Parse(parts[0]);
+                beatValue = int.Parse(parts[1]);
+            }
         }
     }
 
@@ -80,9 +93,12 @@ public class SongManager : MonoBehaviour
             }
         }
 
-        float targetX = spawnedBlocks[activeGridIndex].transform.position.x;
+        float gridWidth = ProjectConfig.numInversions * ProjectConfig.Spacing;
+        float targetX = spawnedBlocks[activeGridIndex].transform.position.x + (gridWidth / 2f);
         Vector3 targetPos = new Vector3(targetX, mainCamera.position.y, mainCamera.position.z);
+        
         mainCamera.position = Vector3.Lerp(mainCamera.position, targetPos, Time.deltaTime * cameraPanSpeed);
+        // should do smooth progress?
     }
 
     void InitializeSongGrids()
@@ -97,7 +113,6 @@ public class SongManager : MonoBehaviour
 
             gridStartBeats.Add(currentBeatTracker);
 
-            //gridLen = measure.gridWidth + Project.gridSpacing;
             Vector3 spawnPos = new Vector3(currentXOffset, 0, 0);
             GameObject blockObj = Instantiate(keyBlockPrefab, spawnPos, Quaternion.identity);
             KeyBlock blockScript = blockObj.GetComponent<KeyBlock>();
@@ -105,12 +120,33 @@ public class SongManager : MonoBehaviour
             blockScript.BuildFromData(data);
             spawnedBlocks.Add(blockScript);
 
+            blockScript.startBeatOffset = currentBeatTracker;
+
             currentBeatTracker += data.measureDuration;
 
-            float blockWidth = data.semitones.Length * ProjectConfig.Spacing;
+            float blockWidth = ProjectConfig.numInversions * ProjectConfig.Spacing;
             currentXOffset += blockWidth + ProjectConfig.gridSpacing;
         }
 
     totalSongBeats = currentBeatTracker;
+    }
+
+    public void StartNewSong(SongData newData)
+    {
+        foreach (var block in spawnedBlocks)
+        {
+            if (block != null) Destroy(block.gameObject);
+        }
+        
+        spawnedBlocks.Clear();
+        gridStartBeats.Clear();
+
+        currentSongData = newData;
+        GlobalClock.ResetClock(); 
+        GlobalClock.BPM = currentSongData.bpm;
+
+        InitializeSongGrids();
+        
+        Debug.Log("World Rebuilt for: " + newData.songName);
     }
 }

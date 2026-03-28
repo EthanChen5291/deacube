@@ -8,7 +8,7 @@ public class AudioGridManager : MonoBehaviour
 
     void Start()
     {
-        initializeGrid();
+        //initializeGrid();
     }
 
     void initializeGrid()

@@ -6,7 +6,8 @@ public static class ProjectConfig
     public const int Cols = 12;
     public const int Rows = 7;
     public const float Spacing = 1.2f;
-    public const float gridSpacing = 20f;
+    public const float gridSpacing = 15f;
+    public const int numInversions = 4;
 
     // cube mechanics
     public const float CubeDropHeight = 2.0f;

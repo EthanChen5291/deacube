@@ -11,6 +11,7 @@ public class AudioCube : MonoBehaviour
     private int lastIndex = -1;
     private float lastBeatTracker = -1f;
     private bool hasReturned = false;
+    public float startBeatOffset;
 
     private AudioSource myAudio;
 
@@ -24,7 +25,7 @@ public class AudioCube : MonoBehaviour
     {
         if (!GlobalClock.IsPlaying || pathNodes.Count < 2) return;
 
-        float currentBeat = GlobalClock.CurrentBeat;
+        float currentBeat = GlobalClock.SongBeat - startBeatOffset;
 
         if (currentBeat < lastBeatTracker) 
         {
@@ -37,7 +38,7 @@ public class AudioCube : MonoBehaviour
 
         if (!isReadyToPlay)
         {
-            if (GlobalClock.CurrentBeat < 0.1f) isReadyToPlay = true;
+            if (currentBeat >= 0 && currentBeat < 0.1f) isReadyToPlay = true;
             return;
         }
 
@@ -47,11 +48,8 @@ public class AudioCube : MonoBehaviour
         {
             if (indexA != lastIndex)
             {
-                if (indexA < pathNodes.Count)
-                {
-                    TriggerTileSound(indexA);
-                    lastIndex = indexA;
-                }
+                TriggerTileSound(indexA);
+                lastIndex = indexA;
             }   
         }
 
@@ -77,7 +75,6 @@ public class AudioCube : MonoBehaviour
 
             Vector3 endTile = pathNodes[pathNodes.Count - 1];
             Vector3 startTile = pathNodes[0];
-
 
             if (percentToFirstTile <= 0)
             {
@@ -146,15 +143,9 @@ public class AudioCube : MonoBehaviour
             TileInteraction tile = hit.collider.GetComponent<TileInteraction>();
             if (tile != null)
             {
-                var allCubes = Object.FindObjectsByType<AudioCube>();
-                int n = allCubes.Length;
-                //float individualVolume = ProjectConfig.MaxSystemVolume / Mathf.Max(1, n);
-
                 if (myAudio != null)
                 {
                     myAudio.pitch = tile.myFrequency / ProjectConfig.refFreq;
-                    //myAudio.volume = individualVolume;
-
                     myAudio.PlayOneShot(myAudio.clip);
                 }
             }
