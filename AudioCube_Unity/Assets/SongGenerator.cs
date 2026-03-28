@@ -12,7 +12,7 @@ public class SongGenerator : MonoBehaviour
 
     [Header("API Settings")]
     public string apiUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-    public string apiKey = "AIzaSyAL_voMyEwC1a8-w6RvSjOeggd52FVHRXI";
+    public string apiKey = "";
 
     [TextArea(5, 10)]
     public string systemPrompt = @"You are a music theory API. 
@@ -27,7 +27,7 @@ JSON Schema:
   ""bpm"": Int,
   ""timeSignature"": ""String (e.g., 4/4)"",
   ""measures"": [
-    { ""index"": Int, ""chordKey"": ""String"", ""chordRootMIDI"": Int (MUST be between 48 and 72), ""semitones"": [Int, Int, Int], ""measureDuration"": Float }
+    { ""index"": Int, ""chordKey"": ""String"", ""chordRootMIDI"": Int (MUST be between 48 and 72), ""semitones"": [Int, ...] (Array of 3 to 5 integers. USE 7th and 9th chords for flavor when appropriate! 0 is always the root.), ""measureDuration"": Float }
   ]
 }";
 
@@ -49,10 +49,24 @@ JSON Schema:
         public string content;
     }
 
+    private bool isGenerating = false;
+
     public void GenerateNewSong(string userVibePrompt, Action<bool> onComplete)
     {
+        if (isGenerating)
+        {
+            Debug.LogWarning("Chill! The AI is already thinking...");
+            return;
+        }
+
+        isGenerating = true;
         Debug.Log("Asking AI for: " + userVibePrompt);
-        StartCoroutine(SendRequestToLLM(userVibePrompt, onComplete));
+        
+        StartCoroutine(SendRequestToLLM(userVibePrompt, (success) => 
+        {
+            isGenerating = false;
+            onComplete?.Invoke(success);
+        }));
     }
 
     private IEnumerator SendRequestToLLM(string userPrompt, Action<bool> onComplete)
@@ -61,7 +75,7 @@ JSON Schema:
         string safeUserPrompt = userPrompt.Replace("\"", "\\\""); 
 
         string jsonPayload = $@"{{
-            ""model"": ""gemini-2.5-flash"",
+            ""model"": ""gemini-3.1-flash-lite-preview"",
             ""messages"": [
                 {{""role"": ""system"", ""content"": ""{safeSystemPrompt}""}},
                 {{""role"": ""user"", ""content"": ""{safeUserPrompt}""}}

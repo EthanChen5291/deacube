@@ -1,5 +1,5 @@
+using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using UnityEngine;
 
 public class AudioCube : MonoBehaviour
@@ -7,10 +7,9 @@ public class AudioCube : MonoBehaviour
     public List<Vector3> pathNodes;
     private Vector3 startPos;
     public bool isReadyToPlay = false;
+    public bool isFinalized = false;
 
     private int lastIndex = -1;
-    private float lastBeatTracker = -1f;
-    private bool hasReturned = false;
     public float startBeatOffset;
 
     private AudioSource myAudio;
@@ -23,76 +22,38 @@ public class AudioCube : MonoBehaviour
 
     void Update()
     {
-        if (!GlobalClock.IsPlaying || pathNodes.Count < 2) return;
+        if (!GlobalClock.IsPlaying || pathNodes == null || pathNodes.Count < 1 || !isFinalized) return;
 
-        float currentBeat = GlobalClock.SongBeat - startBeatOffset;
+        float localBeat = GlobalClock.SongBeat - startBeatOffset;
 
-        if (currentBeat < lastBeatTracker) 
+        if (localBeat < 0f) 
         {
-            hasReturned = false;
-            lastIndex = -1;
-            isReadyToPlay = true; 
-        }
-        
-        lastBeatTracker = currentBeat;
-
-        if (!isReadyToPlay)
-        {
-            if (currentBeat >= 0 && currentBeat < 0.1f) isReadyToPlay = true;
-            return;
+            transform.position = pathNodes[0];
+            transform.rotation = Quaternion.identity;
+            return; 
         }
 
-        int indexA = Mathf.FloorToInt(currentBeat);
+        int indexA = Mathf.FloorToInt(localBeat);
 
-        if (indexA < pathNodes.Count)
+        // EXTRA SAFETY: Ensure indexA is actually inside the list
+        if (indexA >= 0 && indexA < pathNodes.Count)
         {
             if (indexA != lastIndex)
             {
                 TriggerTileSound(indexA);
                 lastIndex = indexA;
-            }   
+            }
         }
 
-        if (indexA >= pathNodes.Count - 1) // lerp to beginning? not sure
+        if (indexA >= pathNodes.Count - 1) 
         {
-
-            if (hasReturned) 
-            {
-                transform.position = pathNodes[0];
-                transform.rotation = Quaternion.identity;
-                return;
-            }
-
-            float beatsPast = currentBeat - (pathNodes.Count - 1);
-            float delay = (1f - ProjectConfig.snapThreshold)/2; 
-            float returnDuration = 1.0f;
-
-            float percentToFirstTile = Mathf.Clamp((beatsPast - delay) / returnDuration, 0, 1);
-
-            if (percentToFirstTile >= 1.0f) hasReturned = true;
-
-            float smoothProgress = Mathf.SmoothStep(0, 1, percentToFirstTile);
-
-            Vector3 endTile = pathNodes[pathNodes.Count - 1];
-            Vector3 startTile = pathNodes[0];
-
-            if (percentToFirstTile <= 0)
-            {
-                transform.position = endTile;
-                transform.rotation = Quaternion.identity; 
-            }
-            else
-            {
-                Vector3 basePos = Vector3.Lerp(endTile, startTile, smoothProgress);
-                float hopY = Mathf.Sin(smoothProgress * Mathf.PI) * ProjectConfig.cubeHopIntensity;
-                transform.position = basePos + new Vector3(0, hopY, 0);
-                transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.identity, smoothProgress);
-            }
+            transform.position = pathNodes[pathNodes.Count - 1];
+            transform.rotation = Quaternion.identity;
             return;
         }
 
         int indexB = indexA + 1;
-        float percentToNextTile = currentBeat - indexA;
+        float percentToNextTile = localBeat - indexA;
 
         if (percentToNextTile < ProjectConfig.snapThreshold)
         {
@@ -101,28 +62,20 @@ public class AudioCube : MonoBehaviour
         else
         {
             float flipPercent = (percentToNextTile - ProjectConfig.snapThreshold) / (1.0f - ProjectConfig.snapThreshold);
-
-            // cube "jump"
             Vector3 basePos = Vector3.Lerp(pathNodes[indexA], pathNodes[indexB], flipPercent);
-
+            
             float hopY = Mathf.Sin(flipPercent * Mathf.PI) * ProjectConfig.cubeHopIntensity;
-
             transform.position = basePos + new Vector3(0, hopY, 0);
 
-            // cube rotation
             Vector3 movementDir = (pathNodes[indexB] - pathNodes[indexA]).normalized;
-
             Vector3 axisOfRotation = Vector3.Cross(Vector3.up, movementDir);
 
             float distance = Vector3.Distance(pathNodes[indexA], pathNodes[indexB]);
-
             float rotationDegrees = distance > 1f ? -180f : 90f;
 
             Quaternion targetRotation = Quaternion.AngleAxis(rotationDegrees, axisOfRotation);
-
             transform.rotation = Quaternion.Lerp(Quaternion.identity, targetRotation, flipPercent);
         }
-
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -154,7 +107,11 @@ public class AudioCube : MonoBehaviour
 
     public void ResetToStart()
     {
-        if (pathNodes.Count > 0) transform.position = pathNodes[0];
+        if (pathNodes != null && pathNodes.Count > 0) 
+        {
+            transform.position = pathNodes[0];
+            transform.rotation = Quaternion.identity;
+        }
         lastIndex = -1;
         isReadyToPlay = true;
     }
@@ -163,7 +120,6 @@ public class AudioCube : MonoBehaviour
     {
         pathNodes = new List<Vector3>(nodes);
         if (pathNodes.Count > 0) startPos = pathNodes[0];
-
         isReadyToPlay = true;
     }
 }

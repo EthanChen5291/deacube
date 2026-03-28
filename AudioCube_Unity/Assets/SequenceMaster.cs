@@ -1,22 +1,70 @@
 using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
 
 public class SequenceMaster : MonoBehaviour
 {
+    public static float TotalSongLength = 16f;
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.P)) TogglePlayback();
 
-        if (!GlobalClock.IsPlaying || GlobalClock.MasterBeatLength <= 0) return;
+        // REMOVED the MasterBeatLength check so the clock can always tick
+        if (!GlobalClock.IsPlaying) return;
 
         float beatsPerSecond = GlobalClock.BPM / 60f;
-        GlobalClock.CurrentBeat += beatsPerSecond * Time.deltaTime;
-        GlobalClock.SongBeat += beatsPerSecond * Time.deltaTime;
+        float tick = beatsPerSecond * Time.deltaTime;
         
-        if (GlobalClock.CurrentBeat >= GlobalClock.MasterBeatLength)
+        GlobalClock.SongBeat += tick;
+
+        // Use TotalSongLength (which we calculated) to loop, NOT MasterBeatLength
+        if (GlobalClock.SongBeat >= TotalSongLength)
         {
-            GlobalClock.CurrentBeat = 0f;
+            GlobalClock.SongBeat = 0f;
             ResetAllCubes();
         }
+    }
+
+public static void RecalculateTimeline()
+    {
+        AudioCube[] cubes = Object.FindObjectsByType<AudioCube>(FindObjectsInactive.Exclude);
+        if (cubes.Length == 0) return;
+
+        int maxGridIndex = 0;
+        Dictionary<int, int> gridDurations = new Dictionary<int, int>();
+
+        foreach(var cube in cubes)
+        {
+            if (cube.pathNodes == null || cube.pathNodes.Count == 0) continue;
+            int gridIndex = Mathf.RoundToInt(cube.pathNodes[0].x / ProjectConfig.gridSpacing);
+            if (gridIndex > maxGridIndex) maxGridIndex = gridIndex;
+
+            int pathLength = cube.pathNodes.Count;
+            if (!gridDurations.ContainsKey(gridIndex) || pathLength > gridDurations[gridIndex])
+                gridDurations[gridIndex] = pathLength;
+        }
+
+        float currentAccumulatedTime = 0f;
+        Dictionary<int, float> gridStartOffsets = new Dictionary<int, float>();
+
+        // FIXED: Only ONE loop to calculate offsets
+        for (int i = 0; i <= maxGridIndex; i++)
+        {
+            gridStartOffsets[i] = currentAccumulatedTime;
+            if (gridDurations.ContainsKey(i))
+                currentAccumulatedTime += gridDurations[i]; 
+        }
+
+        foreach(var cube in cubes)
+        {
+            if (cube.pathNodes == null || cube.pathNodes.Count == 0) continue;
+            int gridIndex = Mathf.RoundToInt(cube.pathNodes[0].x / ProjectConfig.gridSpacing);
+            cube.startBeatOffset = gridStartOffsets[gridIndex];
+        }
+
+        // Set the loop point
+        TotalSongLength = currentAccumulatedTime > 0 ? currentAccumulatedTime : 4f;
+        Debug.Log($"Timeline Recalculated! Song Length: {TotalSongLength}");
     }
 
     void ResetAllCubes()
@@ -32,7 +80,7 @@ public class SequenceMaster : MonoBehaviour
     {
         GlobalClock.IsPlaying = !GlobalClock.IsPlaying;
 
-        if (GlobalClock.IsPlaying)
+        if (GlobalClock.IsPlaying && GlobalClock.SongBeat <= 0.1f)
         {
             ResetAllCubes();
         }

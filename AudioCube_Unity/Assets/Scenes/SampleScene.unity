@@ -2094,7 +2094,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SongGenerator
   songManager: {fileID: 1542419926}
   apiUrl: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
-  apiKey: AIzaSyAL_voMyEwC1a8-w6RvSjOeggd52FVHRXI
+  apiKey: AIzaSyAo1jcR1IyXYHG4rwQwoR-DrIOEsf_DSEo
   systemPrompt: "You are a music theory API. \nBased on the user's prompt, generate
     a 4 to 10 chord progression. \nYou must respond ONLY with a raw JSON object matching
     the exact schema provided. \nDo not include markdown formatting, conversational
