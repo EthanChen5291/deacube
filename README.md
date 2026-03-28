@@ -8,11 +8,9 @@ Compose music by designing motion. AudioCube delivers audio sequencing through a
 
 ---
 
-AudioCube aims to make music sequencing more visual and interactive.
-
 Most sequencers are timeline-based. This one is spatial.
 
-Players place tiles, draw paths, press play. The system then handles timing, movement, and playback. The goal is to make patterns easier to see and tweak in real time.
+Players place tiles, draw paths, then press play. The system then handles timing, movement, and playback. The goal is to make patterns easier to see and tweak in real time.
 
 ---
 
