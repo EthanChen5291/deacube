@@ -131,32 +131,26 @@ public class PathManager : MonoBehaviour
     public void FinalizePath()
     {
         int pathLength = currentPathTiles.Count;
-        
         if (pathLength <= 0) return;
 
-        if (pathLength > GlobalClock.MasterBeatLength) {
-            GlobalClock.MasterBeatLength = (float)pathLength;
-            Debug.Log($"master beat length: {GlobalClock.MasterBeatLength}");
-        }
-
-        GlobalClock.CurrentBeat = 0;
-
         List<Vector3> worldPositions = new List<Vector3>();
-
         foreach(var tile in currentPathTiles)
         {
             Vector3 nodePos = tile.transform.position + new Vector3(0, ProjectConfig.CubeHoverHeight, 0);
             worldPositions.Add(nodePos);
         }
 
-        activeCube.GetComponent<AudioCube>().SetPath(worldPositions);
+        AudioCube myCube = activeCube.GetComponent<AudioCube>();
+        myCube.SetPath(worldPositions);
 
         ClearAllHighlights();
-
         currentPathTiles.Clear();
-
         isSettingPath = false;
         currentState = EditorState.Idle;
+
+        myCube.isFinalized = true;
+
+        SequenceMaster.RecalculateTimeline();
     }
 
     void HighlightNeighbors(TileInteraction centerTile)

@@ -145,6 +145,8 @@ public class SongManager : MonoBehaviour
         GlobalClock.ResetClock(); 
         GlobalClock.BPM = currentSongData.bpm;
 
+        float beatsPerMeasure = 4f;
+
         InitializeSongGrids();
         
         Debug.Log("World Rebuilt for: " + newData.songName);
