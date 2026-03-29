@@ -53,6 +53,8 @@ public class PathManager : MonoBehaviour
             GameObject selectedPrefab = cubePrefabs[selectedInstrumentIndex];
             activeCube = Instantiate(selectedPrefab, spawnPos, Quaternion.identity);
 
+            activeCube.GetComponent<AudioCube>().assignedGridIndex = clickedTile.parentMeasureIndex;
+
             Rigidbody rb = activeCube.GetComponent<Rigidbody>();
             if (rb != null)
             {

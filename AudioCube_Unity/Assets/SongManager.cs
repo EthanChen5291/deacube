@@ -142,7 +142,7 @@ public class SongManager : MonoBehaviour
         gridStartBeats.Clear();
 
         currentSongData = newData;
-        GlobalClock.ResetClock(); 
+        GlobalClock.ResetClock();
         GlobalClock.BPM = currentSongData.bpm;
 
         float beatsPerMeasure = 4f;

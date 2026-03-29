@@ -8,15 +8,16 @@ public class OrbitCamera : MonoBehaviour
 
     [Header("Orbit Settings")]
     public Vector3 targetDestination;
+    public Vector3 targetRotation;
     private Vector3 currentLerpTarget;
     
-    [Range(5f, 20f)]
+    [Range(5f, 50)]
     public float distance = 5.0f; // doesnt work?
-    public float xSpeed = 150.0f;
-    public float ySpeed = 150.0f;
+    public float xSpeed = 40.0f;
+    public float ySpeed = 2.0f;
 
     [Header("Orbit Settings")]
-    private float cameraSpeed = 1f;
+    private float cameraSpeed = 5f;
     public float distanceToNextGrid;
 
     private float x = 0.0f;
@@ -27,7 +28,7 @@ public class OrbitCamera : MonoBehaviour
         targetDestination  = new Vector3(2f, 0f, 1.5f);
         currentLerpTarget = targetDestination;
 
-        distanceToNextGrid = (ProjectConfig.Spacing * ProjectConfig.numInversions) / 2f + ProjectConfig.gridSpacing;
+        distanceToNextGrid = (ProjectConfig.Spacing * ProjectConfig.numInversions) + ProjectConfig.gridSpacing;
         ApplyCameraTransform();
     }
 
@@ -38,16 +39,22 @@ public class OrbitCamera : MonoBehaviour
         if (Mathf.Abs(scroll) > 0.01f)
         {
             distance -= scroll * 10f;
-            distance = Mathf.Clamp(distance, 5f, 20f);
+            distance = Mathf.Clamp(distance, 5f, 50f);
         }
 
-        // rotation
-        if (Input.GetMouseButton(1))
+        // orbit & crane rotation
+        if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
         {
-            x += Input.GetAxis("Mouse X") * xSpeed * 0.2f;
-            y -= Input.GetAxis("Mouse Y") * ySpeed * 0.2f;
+            Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
 
-            y = Mathf.Clamp(y, 10f, 85f);
+            float normalizedX = (screenCenter.x - Input.mousePosition.x) / screenCenter.x;
+            float normalizedY = (screenCenter.y - Input.mousePosition.y) / screenCenter.y;
+
+            x += normalizedX * xSpeed * Time.deltaTime;
+
+            targetDestination.y -= normalizedY * ySpeed * Time.deltaTime * 0.05f;
+
+            targetDestination.y = Mathf.Clamp(targetDestination.y, -2f, 5f);
         }
 
         // grid jumping
@@ -57,7 +64,7 @@ public class OrbitCamera : MonoBehaviour
             {
                 float limitX = 2f + (distanceToNextGrid * (songManager.currentSongData.measures.Length - 1));
                 
-                if (targetDestination.x < limitX - 0.1f) 
+                if (targetDestination.x < limitX + 1) 
                 {
                     targetDestination += new Vector3(distanceToNextGrid, 0f, 0f);
                 }
@@ -72,7 +79,18 @@ public class OrbitCamera : MonoBehaviour
 
         currentLerpTarget = Vector3.Lerp(currentLerpTarget, targetDestination, Time.deltaTime * cameraSpeed);
         
+        if (Vector3.Distance(currentLerpTarget, targetDestination) < 0.001f)
+        {
+            currentLerpTarget = targetDestination;
+        }
+
+        float heightPercentage = Mathf.InverseLerp(-2f, 5f, currentLerpTarget.y);
+
+        y = Mathf.Lerp(10f, 85f, heightPercentage);
+
         ApplyCameraTransform();
+
+        ResetCamera();
     }
 
     void ApplyCameraTransform()
@@ -83,5 +101,17 @@ public class OrbitCamera : MonoBehaviour
 
         transform.rotation = rotation;
         transform.position = position;
+    }
+
+    void ResetCamera()
+    {
+        if (Input.GetKeyDown(KeyCode.Q))
+        {
+            x = 0f;
+            y = 40f;
+
+            targetDestination  = new Vector3(2f, 0f, 1.5f);
+            currentLerpTarget = targetDestination;
+        }
     }
 }

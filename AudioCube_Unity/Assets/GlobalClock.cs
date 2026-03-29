@@ -10,12 +10,14 @@ public class GlobalClock : MonoBehaviour
     public static float MasterBeatLength = 4f;
 
     [SerializeField] private float debugBeat;
+    [SerializeField] private float debugSongBeat;
     [SerializeField] private float debugMasterLength;
 
     void Update()
     {
         debugBeat = CurrentBeat;
         debugMasterLength = MasterBeatLength;
+        debugSongBeat = SongBeat;
     }
 
     public static void ResetClock()
