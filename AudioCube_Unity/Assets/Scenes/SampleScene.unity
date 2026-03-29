@@ -672,7 +672,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::OrbitCamera
   songManager: {fileID: 1542419926}
   targetDestination: {x: 0, y: 0, z: 0}
-  distance: 15
+  targetRotation: {x: 0, y: 0, z: 0}
+  distance: 10
   xSpeed: 120
   ySpeed: 120
   distanceToNextGrid: 0
@@ -2095,13 +2096,20 @@ MonoBehaviour:
   songManager: {fileID: 1542419926}
   apiUrl: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
   apiKey: AIzaSyAo1jcR1IyXYHG4rwQwoR-DrIOEsf_DSEo
-  systemPrompt: "You are a music theory API. \nBased on the user's prompt, generate
-    a 4 to 10 chord progression. \nYou must respond ONLY with a raw JSON object matching
-    the exact schema provided. \nDo not include markdown formatting, conversational
-    text, or explanations.\nSchema:\n{\n  \"songName\": \"String\",\n  \"bpm\": Int,\n 
-    \"timeSignature\": \"String (e.g., 4/4)\",\n  \"measures\": [\n    { \"index\":
-    Int, \"chordKey\": \"String\", \"semitones\": [Int, Int, Int], \"measureDuration\":
-    Float }\n  ]\n}"
+  systemPrompt: "You are an expert music theory API for a spatial 3D sequencer.\nGenerate
+    a 4-8 measure chord progression capturing the user's requested vibe.\nYou MUST
+    respond with ONLY a raw JSON object. NO markdown formatting.\n\nCRITICAL RULES:\n1.
+    'chordRootMIDI' is MANDATORY. It MUST be an integer between 48 and 72. (C=60,
+    C#=61, D=62, D#=63, E=64, F=65, F#=66, G=67, G#=68, A=69, A#=70, B=71).\n2. 'semitones'
+    must be intervals RELATIVE to the root. The array MUST always start with 0. \n3.
+    Use rich voicings! Use 7ths, 9ths, and 11ths for jazz/space vibes. (e.g., Major
+    9th = [0, 4, 7, 11, 14]).\n\nPERFECT JSON EXAMPLE:\n{\n  \"songName\": \"Deep
+    Space\",\n  \"bpm\": 90,\n  \"timeSignature\": \"4/4\",\n  \"measures\": [\n   
+    {\n      \"index\": 1,\n      \"chordKey\": \"Cm9\",\n      \"chordRootMIDI\":
+    60,\n      \"semitones\": [0, 3, 7, 10, 14],\n      \"measureDuration\": 4.0\n   
+    },\n    {\n      \"index\": 2,\n      \"chordKey\": \"Abmaj7\",\n      \"chordRootMIDI\":
+    56,\n      \"semitones\": [0, 4, 7, 11],\n      \"measureDuration\": 4.0\n   
+    }\n  ]\n}"
 --- !u!114 &1542419926
 MonoBehaviour:
   m_ObjectHideFlags: 0

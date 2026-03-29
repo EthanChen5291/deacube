@@ -11,6 +11,7 @@ public class TileInteraction : MonoBehaviour
     public int gridX;
     public int gridZ;
     private Vector3 initialPosition;
+    public int parentMeasureIndex;
 
     // visuals
     private Color originalColor;

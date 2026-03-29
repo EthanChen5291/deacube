@@ -19,15 +19,31 @@ public class SongGenerator : MonoBehaviour
 Generate a 4-10 chord progression.
 Response MUST be a raw JSON object. NO conversational text.
 
-CRITICAL: You must include the 'chordRootMIDI' field for every measure. 
-Example MIDI values: C=60, C#=61, D=62, D#=63, E=64, F=65, F#=66, G=67, G#=68, A=69, A#=70, B=71.
-JSON Schema:
+CRITICAL RULES:
+1. 'chordRootMIDI' is MANDATORY. It MUST be an integer between 48 and 72. (C=60, C#=61, D=62, D#=63, E=64, F=65, F#=66, G=67, G#=68, A=69, A#=70, B=71).
+2. 'semitones' must be intervals RELATIVE to the root. The array MUST always start with 0. 
+3. Use rich voicings! Use 7ths, 9ths, and 11ths for jazz/space vibes. (e.g., Major 9th = [0, 4, 7, 11, 14]).
+
+PERFECT JSON EXAMPLE:
 {
-  ""songName"": ""String"",
-  ""bpm"": Int,
-  ""timeSignature"": ""String (e.g., 4/4)"",
+  ""songName"": ""Deep Space"",
+  ""bpm"": 90,
+  ""timeSignature"": ""4/4"",
   ""measures"": [
-    { ""index"": Int, ""chordKey"": ""String"", ""chordRootMIDI"": Int (MUST be between 48 and 72), ""semitones"": [Int, ...] (Array of 3 to 5 integers. USE 7th and 9th chords for flavor when appropriate! 0 is always the root.), ""measureDuration"": Float }
+    {
+      ""index"": 1,
+      ""chordKey"": ""Cm9"",
+      ""chordRootMIDI"": 60,
+      ""semitones"": [0, 3, 7, 10, 14],
+      ""measureDuration"": 4.0
+    },
+    {
+      ""index"": 2,
+      ""chordKey"": ""Abmaj7"",
+      ""chordRootMIDI"": 56,
+      ""semitones"": [0, 4, 7, 11],
+      ""measureDuration"": 4.0
+    }
   ]
 }";
 

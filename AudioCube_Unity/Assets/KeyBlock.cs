@@ -64,6 +64,8 @@ public class KeyBlock : MonoBehaviour
                 script.gridX = x;
                 script.gridZ = z;
 
+                script.parentMeasureIndex = measureIndex;
+
                 myTiles.Add(script);
 
                 tile.name = $"Tile_{measureIndex}_{x}_{z}";

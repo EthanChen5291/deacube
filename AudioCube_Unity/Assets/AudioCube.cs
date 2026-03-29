@@ -9,6 +9,7 @@ public class AudioCube : MonoBehaviour
     public bool isReadyToPlay = false;
     public bool isFinalized = false;
 
+    public int assignedGridIndex;
     private int lastIndex = -1;
     public float startBeatOffset;
 
@@ -35,7 +36,6 @@ public class AudioCube : MonoBehaviour
 
         int indexA = Mathf.FloorToInt(localBeat);
 
-        // EXTRA SAFETY: Ensure indexA is actually inside the list
         if (indexA >= 0 && indexA < pathNodes.Count)
         {
             if (indexA != lastIndex)
