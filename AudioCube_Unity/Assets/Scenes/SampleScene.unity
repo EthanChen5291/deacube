@@ -1009,6 +1009,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GlobalClock
   debugBeat: 0
+  debugSongBeat: 0
   debugMasterLength: 0
 --- !u!4 &533990668
 Transform:
@@ -2095,7 +2096,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SongGenerator
   songManager: {fileID: 1542419926}
   apiUrl: https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
-  apiKey: AIzaSyAo1jcR1IyXYHG4rwQwoR-DrIOEsf_DSEo
+  apiKey: 
   systemPrompt: "You are an expert music theory API for a spatial 3D sequencer.\nGenerate
     a 4-8 measure chord progression capturing the user's requested vibe.\nYou MUST
     respond with ONLY a raw JSON object. NO markdown formatting.\n\nCRITICAL RULES:\n1.
