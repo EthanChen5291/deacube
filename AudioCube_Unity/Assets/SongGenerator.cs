@@ -1,6 +1,6 @@
 using System;
 using System.Collections;
-using System.ComponentModel.Design.Serialization;
+using System.IO;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -12,7 +12,7 @@ public class SongGenerator : MonoBehaviour
 
     [Header("API Settings")]
     public string apiUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-    public string apiKey = "";
+    private string apiKey;
 
     [TextArea(5, 10)]
     public string systemPrompt = @"You are a music theory API. 
@@ -66,6 +66,26 @@ PERFECT JSON EXAMPLE:
     }
 
     private bool isGenerating = false;
+
+    private void Awake()
+    {
+        string path = Path.Combine(Application.streamingAssetsPath, "api_config.env");
+        if (File.Exists(path))
+        {
+            foreach (string line in File.ReadAllLines(path))
+            {
+                if (line.StartsWith("GEMINI_API_KEY="))
+                {
+                    apiKey = line["GEMINI_API_KEY=".Length..].Trim();
+                    break;
+                }
+            }
+        }
+        else
+        {
+            Debug.LogError("api_config.env not found in StreamingAssets. Copy api_config.env.example and fill in your key.");
+        }
+    }
 
     public void GenerateNewSong(string userVibePrompt, Action<bool> onComplete)
     {

@@ -17,3 +17,8 @@
 build/
 bin/
 obj/
+
+# ENV
+.env
+env
+AudioCube_Unity/Assets/StreamingAssets/api_config.env
