@@ -4,7 +4,7 @@
 
 An AI-assisted Spatial Audio Sequencer. Built with Unity and JUCE (C++)
 
-Compose music by designing motion. DeaCube aims to support audio sequencing through a highly intuitive experience, requiring no music theory experience at all.
+Compose music by designing motion. DeaCube aims to support audio sequencing through a highly intuitive experience, no music theory experience needed.
 
 ---
 
