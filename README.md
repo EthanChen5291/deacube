@@ -1,5 +1,7 @@
 # AudioCube
 
+Demo Release in June!
+
 A Spatial Audio Sequencer. Built with Unity and JUCE (C++)
 
 Compose music by designing motion. AudioCube delivers audio sequencing through a visual, spatial experience, leaving behind worries of intricate music theory.
@@ -8,18 +10,12 @@ Compose music by designing motion. AudioCube delivers audio sequencing through a
 
 ---
 
-Most sequencers are timeline-based. This one is spatial.
-
-Players place tiles, draw paths, then press play. The system then handles timing, movement, and playback. The goal is to make patterns easier to see and tweak in real time.
-
----
-
 **How it works**
 
-- A global BPM clock keeps everything in sync  
-- Draw paths across adjacent tiles (ie. a square or a circle!)
-- A cube moves along that path on beat  
-- When it lands on a tile, it plays that tile’s note
+- Grids are mapped to the user's desired musical context via a prompt (ie. "japanese pop", "space")
+- Multiple grids are given to the user (each a unique compliment of the musical context)
+- User picks the grids they like in the order they like, then draws paths across adjacent tiles on the grids
+- Cubes then moves along those paths on beat, triggering the tile's notes.
 
 Tiles store pitch data, so changing the grid OR key adapts the melody in real time. Tempo (the speed of the song) also can be maneuvered in real time!
 
@@ -33,3 +29,12 @@ Tiles store pitch data, so changing the grid OR key adapts the melody in real ti
 
 - **Engine:** Unity (URP) alongside C++ (JUCE)
 - **Language:** C# and C++
+
+---
+
+## Incoming Features:
+
+- Real-time tempo control
+- Grid selection (building block style)
+- Individualized cube menus for better control over cube paths
+- Improved audio players (JUCE audio VST incorporation)
