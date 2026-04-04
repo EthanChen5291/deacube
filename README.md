@@ -2,7 +2,7 @@
 
 <img src="AudioCube/Resources/Sprites/diacube_logo.png" alt="DeaCube Preview" width="570">
 
-A Spatial Audio Sequencer. Built with Unity and JUCE (C++)
+An AI-assisted Spatial Audio Sequencer. Built with Unity and JUCE (C++)
 
 Compose music by designing motion. DeaCube aims to support audio sequencing through a highly intuitive experience, requiring no music theory experience at all.
 
