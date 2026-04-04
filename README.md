@@ -1,12 +1,12 @@
 # AudioCube
 
-Demo Release in June!
+## 📌 Demo Release in June!
 
 A Spatial Audio Sequencer. Built with Unity and JUCE (C++)
 
 Compose music by designing motion. AudioCube delivers audio sequencing through a visual, spatial experience, leaving behind worries of intricate music theory.
 
-![Audio Preview](AudioCube/Resources/Sprites/preview.png)
+![Audio Preview](AudioCube/Resources/Sprites/diacube_logo.png)
 
 ---
 
