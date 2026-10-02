@@ -8,7 +8,7 @@ using System.Text;
 using UnityEngine;
 
 /// <summary>
-/// v9 (builder G): the gallery's "get proto" — the user's own MIDI (get_proto-2.mid, the repository root) built the way a DeaCube player builds a
+/// v9 (builder G): the gallery's "get proto" — the user's own MIDI (sample.mid, the repository root) built the way a DeaCube player builds a
 /// song (tools/gallery/midi_grid.py, round 3; the user: "the point of deacube is to abstract away the piano" and "more creative ... more effects"):
 /// a chord card per bar, one lane per voice (front to back: the lead and its stairs, the bass lowered, the harmony, the high lane raised), paths
 /// over the chord's tiles with NUDGES for the notes a card has no tile for, a STAIRS island on every descending measure of any voice, a LAUNCH on
@@ -797,7 +797,7 @@ public static class V9ChecksProto
     struct Want { public int track, slot, t, end, pitch, vel; }
     static List<Want> Expected(out string info)
     {
-        string path = Path.GetFullPath(Path.Combine(Application.dataPath, "../../get_proto-2.mid"));
+        string path = Path.GetFullPath(Path.Combine(Application.dataPath, "../../sample.mid"));
         int div;
         var notes = ReadMidi(path, out div);
         double per = div / 24.0;

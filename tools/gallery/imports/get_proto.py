@@ -1,4 +1,4 @@
-"""get proto — the user's own MIDI (get_proto-2.mid, at the repository root), made a gallery song by midi_song.py.
+"""get proto — the user's own MIDI (sample.mid, at the repository root), made a gallery song by midi_song.py.
 
 Measured (midi_song.py, the analysis in docs/deacube-gallery.md): 960 ticks a quarter, one tempo (370370 us = 162 bpm), no time signature (4/4),
 11 tracks, 4802 notes, no controllers or pitch bends (velocities are the only dynamics). The music sits an EIGHTH LATE against the file's bar
@@ -25,10 +25,10 @@ ROLES = [1, 2, 2, 2, 2, 4, 4, 3, 2, 2, 5, 5, 4, 4, 3, 3, 3, 3, 5, 6, 6]
 CONFIG = dict(
     id="get-proto",
     title="get proto",
-    after="your own midi · get_proto-2",
+    after="your own midi · sample",
     blurb="your song, every voice in its lane",
     order=7,
-    midi="get_proto-2.mid",
+    midi="sample.mid",
     shift=480,                       # the file's music sits an 8th late
     bpm=162,
     key_pc=11, minor=True,           # B minor
@@ -80,8 +80,8 @@ CONFIG = dict(
 # The user (2026-10-01, on round 1's keyboards): "you literally just pasted in the MIDI onto pianos ... the point of deacube is to abstract away
 # the piano". Round 2: a chord card per bar, one lane per voice on chord grids, the devices for the song's moments (docs/deacube-gallery.md).
 CONFIG2 = dict(
-    id="get-proto", title="get proto", after="your own midi · get_proto-2", blurb="your song, every voice in its lane", order=7,
-    midi="get_proto-2.mid", shift=480, bpm=162, key_pc=11, minor=True, vibe=3, hook=25,
+    id="get-proto", title="get proto", after="your own midi · sample", blurb="your song, every voice in its lane", order=7,
+    midi="sample.mid", shift=480, bpm=162, key_pc=11, minor=True, vibe=3, hook=25,
     # harmony: the loop's cards (bar 1 = A9), chosen for the bass's root-fifth (E-A, D-G, C#-F#, B) and the most note-time on their tiles;
     # colour cards where the song turns: the intro's swell (A major), C''s turnaround into E (C#7, F#7)
     loop_cards=["A9", "Gmaj9", "F#m7", "Bm9"], loop_from=1,

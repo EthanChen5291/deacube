@@ -186,7 +186,7 @@ Three rounds:
 - **Round 3** (this one) keeps round 2's cards and lanes and adds the rest.
 
 `tools/gallery/midi_grid.py` builds it from the MIDI (`plan_song3`; the choices are `CONFIG3` in `tools/gallery/imports/get_proto.py`) and
-`build_gallery.py` writes it with the others. The card reads "after your own midi · get_proto-2"; the hook is bar 25, the first C.
+`build_gallery.py` writes it with the others. The card reads "after your own midi · sample"; the hook is bar 25, the first C.
 
 ### Measured (the MIDI)
 

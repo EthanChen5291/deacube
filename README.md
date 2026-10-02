@@ -6,63 +6,75 @@
 
 [![Unity](https://img.shields.io/badge/unity-6000.4%20URP-black.svg)](#installation)
 [![Audio](https://img.shields.io/badge/audio-MeltySynth%20%C2%B7%20GeneralUser%20GS-orange.svg)](#how-it-works)
+[![Checks](https://img.shields.io/badge/checks-45%20play--mode%20suites-green.svg)](#quality-checks)
 [![Status](https://img.shields.io/badge/status-demo%20release%20pending-yellow.svg)](#limitations)
 
 </div>
 
+![get proto playing: chord grids in voice lanes, staircases, raised towers and the melody under its spotlight](docs/media/hero-get-proto.jpg)
+
 ## Overview
 
-DeaCube is a spatial music toy drawn like a comic. Describe a vibe (or roll the dice) and the first chord of a progression rises out of a pastel sea as an island of tiles; the rest of the progression waits in a deck of island cards. Pick up a cube from the instrument column and draw a path across an island's tiles: the cube plays it, hopping from tile to tile and sounding each tile it lands on, so a melody is a shape you traced rather than notes you knew. With empty hands a click on a tile only plays it, louder than the song, so you can try notes freely. No music theory is required: every tile belongs to its island's chord, a higher tile sounds higher, and a note's length is simply the cube's size, from a tiny quick cube to a fat, bloated one that holds. For a real tune there is a keyboard island, one row of piano keys where any note goes. Every chord wears a weather you can remember it by (sunny, dreamy, rainy, moonlit, stormy, spicy, floaty) and a number for its job in the progression: 1 home, 2 away, 3 heart, 4 pull (back home). Chords with the same number can swap, and the four jobs in any order make a progression (1 2 3 4 and 1 4 3 2 are both hits); a star on a card says its chord fits the pattern you are working on.
+DeaCube is a spatial music toy drawn like a comic. Describe a vibe (or roll the dice) and the first chord of a progression rises out of a pastel sea as an island of tiles. Pick up a cube and trace a path across the tiles: the cube walks it and plays every tile it lands on, so a melody is a shape you drew rather than notes you knew. Every tile belongs to its island's chord, a higher tile sounds higher, and a note's length is the cube's size, so no music theory is needed.
 
-The song reads left to right in columns. Stack islands above and below one another in a column and they play together, like layers; hover an island to edit it like a component (turn it off, duplicate it, move it an octave lower or higher, drag it by its edge anywhere: into another column, between two columns, earlier or later in the song). Set an island to repeat and it stands on a conveyor belt that jerks it forward one slot for each pass, the next column making room. Copy a cube and paste it onto the next grid, or any grid: its pattern is re-voiced for the new chord (an arpeggio keeps its shape and stays close in pitch, a bass line keeps its root, a melody moves by scale steps). A whole grid's paths copy and paste the same way, all at once, from a sticker on its header. Hovering a chord card in the deck plays the column you're on, every grid in it, re-voiced for that card's chord, so you hear what the next chord would do to your parts before you place it. Set an island to extend and it joins the next one to three islands of its section into one long grid: its cubes walk on through it left to right, their patterns re-voiced for each chord. A cube never leaves its own grid. Raise an island an octave and on its turn it shoots up on a pillar out of the sea, waves ringing out beneath it, and stays up until the song loops, then sinks slowly back. A drum Moon plays from the part of the song it sits under until the next Moon, gliding along with the music, so each part can have its own drums or none. While you draw, a see-through hologram cube shows your path, every note plays as you place it, and hovering the next tile lets you hear it before you commit; press Space to hear the whole path loop in its column. Click a cube and it flies up beside a card with its path and a timeline of its notes, where you stretch, silence or delete a note without redrawing the cube. Press P to present: every island sinks under the sea, then each column bursts up out of the water just before it plays (a bulge, a foam ring, spray, ripples), the cubes walk their paths as they always do, and the camera sinks slowly from high above toward the sea over the whole song. While a song plays, a keyboard whose part comes and goes rises from the ocean just before its part and sinks after it, listing like a boat as it goes down. The gallery on the title screen holds six demo songs that imitate songs of a Japanese Vocaloid / J-pop MIDI corpus (their progressions, tempo, groove and form; the melodies are original) and "get proto", the user's own MIDI built the way a player builds a song (a chord card per bar, every voice in its own lane of chord grids with a nudge where a note is off the chord, a staircase on every falling measure, a launch on every crash, the hook rewinding, the sax's pedal on a long grid, drum Moons with their own kit, a new fx colour), to open, play and take apart.
-
-While a song plays (and in the present mode) the stage lights go down: the sea, the sky and every grid dim a little, cooler and less saturated, so the accompaniment sits back, and in every measure where a lead grid sounds a soft cone of light comes down onto it and leaves a pool of light on its tiles, its cubes glowing at full strength. A keyboard, a staircase or a phrase is always a lead; mark any chord grid as the melody with the spotlight button on its header (or on the selection bar for several). The light fades in a beat before the part and out a beat after it, follows the grid as it rides its belt or rises from the sea, and lights at most four grids at once, the nearest first. The "lights" switch beside the present button turns it all off. The gallery songs come with their melody lanes marked.
-
-A song is made of sections, and the world shows the counting: four beats make a measure (a row of pips on every grid lights beat by beat) and four measures make a section. The columns of a section stand side by side on a stone plinth lettered A, B …, each letter in a circle of its own colour (marigold, coral, teal, violet …; a repeated section keeps its letter and its colour, on the plinth and on the column rail), its measures numbered, dashed ghost measures marking the room a short section has left, a light walking along it as it plays; hover a plinth to name the section (intro, verse, chorus, bridge, drop, outro), split it, join it with the next, duplicate or delete it, give it its own drums or launch it into the next one. The rest are devices for varying a loop, the way a pianist plays one progression ten different ways. A staircase grid plays a run of notes that falls or climbs into the next chord, one note per step (six kinds that fit the genre: chord, scale, spark, slide, bright, walk; a star marks the one that fits), and the grids after it stand on its new height, on terraces of stone. A melody roll is one grid for a melody of any length: draw past its end and it grows, from half a measure to eight. A cube can be copied an octave up or down (a glass copy phases in above the grid or in its reflection below and plays along), given a harmony a fourth or a fifth away that avoids the other cubes' notes, or flipped; a paste can echo a pattern an octave up or down, answer it, or step it along the scale. A repeated grid can rewind instead of riding its belt (a clock spins back and time visibly unwinds to its start each pass) and vary a little each pass; a grid can extend into a long grid over the next chords, its pattern walking on through them left to right, the notes that can stay staying and only the ones that must move following the chords, so the harmony repeats and flows; and a section can launch into the next one on a cymbal swell and a crash. Belts, towers and cubes hold where their turn ended and move back home only when the song loops, never by jumping. Pick a note's size first, then place it; a path holds as many beats as its grid (it grows the grid while the section has room, then says capacity reached and offers to expand), and drawing stays quiet until you press Space to hear the loop. Shift and drag across grids to select them, or a whole section, and copy, paste, delete or move them by octaves together. A keyboard grows an octave when a melody reaches its last key, and a small cream cat sits at it on your side and plays every note; while you write a melody on it you see the keys through the cat's eyes and its paw strikes each note you add.
+A song reads left to right in columns. Islands stacked in a column play together, one lane per voice (bass, harmony, lead, high), and every four measures make a lettered section. Devices vary a loop the way a pianist plays one progression ten ways: a conveyor belt for repeats, rewinds, long grids, octave towers, staircases that fall into the next chord, launches that swell into the next section, echoes and harmonies. While a song plays the stage dims and the melody gets a spotlight; press P and the islands rise out of the sea as their measures arrive.
 
 ## How it works
 
 ```
-Unity (C#, URP), no native code
-Front    MainMenu (cube-wall title, comic panel exit, liquid-pixel glass cubes) · Menu/MenuGallery + MenuPreview (the gallery shelf and its hook previews) · InterfaceController (vibe prompt) · Onboarding (12-step comic tutorial, one-off tips) · Hints
-HUD      UIManager + Ink/Hud (logo menu strip, column rail with section brackets, instrument groups, clipboard chip and paste fan, size row, selection bar, shortcut sheet, transport, sound drawer) · IslandHeader (+ the stairs and melody-roll headers) · SectionHeader · IslandTray (the deck of vibe cards: numbers, stars; stairs, melody, keyboard and Moon cards) · JobBadge · Vibe + VibeGlyphs · CursorKit
-Ink kit  InkShape · CubeGlyph · InkWave · InkPainter · InkCaption (hand-inked stickers, mini cubes, wavy underlines, hover captions)
-World    SongManager (columns, sections, grounds, repeat passes and styles, long grids, launch, the hold-then-return rules, drum sections, song key) · KeyBlock + KeyBlock.Kinds (island, keyboard, staircase, melody roll, beat pips, hub gauge, octave tower, ride) · SectionPlinth · StructureLook · KeyCat (the cat pianist) · Belt · IslandDrag (free drag) · IslandGhost · Route · Comet · ColumnBands · OrbitCamera
-Magic    WorldMagic · Tower (pillar, waves) · Magic (trails, appear pops) · LongGridGlow (the long grid's rim and the glow under its walking cubes) · LaunchFx (the build-up into the next section) · Terrace · EchoLayer (glass octave layers) · RewindFx · StairsFx · MirrorFx · SelectionFx · SectionGlow
-Edit     PathManager (the hand: presses and placing mode; size first, draw, hologram draft, capacity, melody-roll strokes, the Shift marquee) · SongOps (sections, staircases, melody rolls, many grids at once) · GridSelection · CubeOps (octave copy, harmony, flip) · Clipboard (adapted copy / paste, echo, answer and step pastes) · MelodyLine · PitchLook · FocusLoop · CubeInspector + InspectorCard · PathGridView · RhythmStrip · DurationPicker
-Music    AudioCube (per-note lengths, size, smear, long-grid walks, octave layers, harmony bends, rewind, hold-then-return) · VoiceRules (single audio decision point) · Harmony (chord jobs, fit, pattern adaptation, staircase runs, harmonies, answers, variations) · Rhythm · MusicTheory · Performance
-Present  Presenter + Present/* (PresentSea: columns rising from the sea on the beat; PresentRig: the slowly falling camera; PresentWater: the splashes)
-Look     DeaCube/Toon shader (cel bands, ink outline, halftone) · SkyToon / SeaToon · Hologram · Smear (paint-blob smears) · Fx comic effects
-Audio    SynthEngine: MeltySynth rendering the GeneralUser GS SoundFont on the audio thread (79 sounds in 11 instrument groups — the eleventh, fx, for effect sounds like Atmosphere — one channel each, plus an effects channel for the launch riser), sample-accurate event queue, a preview bus the song ducks under · LaunchRiser (a reversed cymbal timed to peak on the landing)
-State    SongState (save v6: columns, sections and their names, registers, note lengths, repeats and their styles, the song key, long grids, launches, keyboards and their ranges, staircases, melody rolls, octave layers, harmony bends, sounds, drum sections; autosave, backups, undo) · Gallery (Resources/Gallery)
+┌──────────────────────────────────────────────┐
+│  VIBE         a prompt or the dice → chords  │
+└──────────────────────┬───────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────┐
+│  ISLANDS      each chord rises as a grid     │
+└──────────────────────┬───────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────┐
+│  PATHS        a cube walks a path you trace  │
+└──────────────────────┬───────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────┐
+│  ARRANGE      columns, voice lanes, sections │
+└──────────────────────┬───────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────┐
+│  DEVICES      repeat, stairs, launch, echo   │
+└──────────────────────┬───────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────┐
+│  PLAY         MeltySynth on the audio thread │
+└──────────────────────┬───────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────┐
+│  PRESENT      islands rise from the sea      │
+└──────────────────────────────────────────────┘
 ```
 
-| Action | Input |
-|---|---|
-| Start | The menu: continue (newest save or autosave), new song (type a vibe or roll the dice), gallery (demo songs: hover a card to hear its chorus, click to open it playing), learn (a guided first song), quit. Move the pointer over the wall of cubes to play it |
-| Menu | The logo cube (top left) or Esc opens the paper strip: resume, new song, save, load, learn, settings (fullscreen, camera follow, captions), clear song (hold), main menu. Undo and redo sit beside the logo |
-| Place islands | The deck at the bottom (or I): the next chords, the chords of your key, a few colour chords, dice, duplicate, the wand (place the rest), a Moon card, a keyboard card, a stairs card and a melody card. Each card is its chord's weather (sunny, dreamy, rainy, moonlit, stormy, spicy, floaty) with its job number (1 home, a house · 2 away, a flag · 3 heart · 4 pull, a curling arrow); a star marks the cards that fit the pattern in your hand, or the island you are looking at. Hover a card for its words; the islands doing the same job show ⇄: those chords can swap. Click a card to add a column after the selected island, or drag it: onto an empty slot above or below an island to stack it in that column, between columns to insert, against an island's side to merge |
-| Edit an island | Hover it: a ribbon appears on its front edge with a grip (or grab its edge: drag it anywhere — onto another column to join it, between two columns for a new one, left is earlier), an eye (on/off), ▼ ▲ (an octave lower or higher: on its turn a raised island rises like a tower out of the sea and stays up until the song loops, then sinks; a lowered one dips), repeat (×1 → ×2 → ×3 → ×4: a conveyor belt, one slot per pass, that stays at its last slot until the song loops; every island of a column at ×2 plays the column twice; the style switch makes it rewind in place instead, and the dice makes each pass vary a little), extend (→: ×1 → ×2 → ×3 → off: the island and the next one to three islands of its section join into one long grid, a thin line at each chord change, and its cubes walk on through it left to right, their pattern re-voiced for each chord, only the notes that must move following; "fill the section" extends it to the section's end), launch (↗ or Shift+→: a cymbal swell into the next section and a crash on its first beat), duplicate → (a new column) and ↓ (a layer below), and ⋯ (chord, mood, fill, length, energy, fall style, delete). The dotted islands above and below add an empty layer with the same chord. The island's triangle fills as its column plays |
-| Hear notes | With empty hands, rest the pointer on a tile to hear it, or click it: a click plays the note louder than anything the song plays (the song dips under it). Press a tile and drag to move its island |
-| Draw a cube's path | Pick up a cube: click an instrument cube on the left (or press 1–9, 0); hover it a moment to fan out the sounds of its group (koto, shamisen, flute, 808 kit …) and click one. The cube rides your cursor at the size of the next note. Size first: pick the size, then place the note (the size row, the wheel over a grid, [ and ], . for dotted; each change plays the length). Click a tile: a hologram cube starts your path and every note plays as you place it, but nothing loops until you press Space (or ▶⟲ on the row) to hear the whole path in its column; a playing song pauses while you draw. Hover a tile to hear the notes a click would add (a far tile fills the line to it) and click to add them; a small card beside the size row draws the shape of your tune. Backspace removes the last note. A path holds as many beats as its grid: a longer melody grows the grid a measure at a time while its section has room (Backspace gives the measure back); after that the grid shakes, says capacity reached and offers expand. Click the last tile again (or Enter, right-click, the ✓) to finish: the cube turns solid and a new cube stays in your hand; Esc, a right-click on the sea or its instrument cube puts it down |
-| Keyboard | The keyboard card adds a keyboard island: two octaves of piano keys from the key's home note. With a cube in hand a click adds exactly that key (leaps are fine), the last key again repeats it, a drag plays a run; keys that fit the part's chord carry a dot, the home key a house. A note on the lowest or highest key adds an octave on that side (up to five octaves); octaves the finished melody does not use fold away again, and the + stickers at the ends of its ribbon add one by hand (fit to the melody trims it). A small cream cat (the game's paper and ink, lilac shading) sits on a bench on your side of every keyboard, its back to you, and plays its notes with short straight arms, sliding along the bench so that a paw lands on each key exactly as it sounds (a wind-up, a smear on fast reaches, a squash on the key), bobbing to the beat and glancing back at you in the rests. While you write a melody on a keyboard the camera moves into the cat's view and its paw strikes each note you add; finishing or dropping the melody brings your view back. With empty hands it plays the keys you press |
-| Copy and paste | Cmd/Ctrl+C (or the copy button on a cube's card) copies its pattern; the clipboard chip (bottom right) shows it. Cmd/Ctrl+V or "paste → next grid" drops it on the next grid, or click the chip and then any grid (a ghost shows the notes first), or drag the chip onto a grid: the pattern is re-voiced for that chord and appears there. The chip's fan (and the cube card) paste it changed: Cmd+↑ / Cmd+↓ an echo an octave higher or lower (on the beat or an eighth late), Cmd+Alt+↑ / Cmd+Alt+↓ a step up or down the scale, Cmd+Shift+V an answer (the same pattern, its last note coming home to the chord) |
-| Cube or sphere | The switch above the instrument column picks the shape of the next piece. A cube steps through every tile on its way (a far click fills the line). A sphere leaps: a click on any tile of the grid adds just that tile, the hover shows the bounce as an arc, and in the song it bounces there, higher and longer the farther it goes, rolling as it flies |
-| Copy a whole grid | Hover a grid: the copy-paths sticker on its header (or Cmd/Ctrl+C over one of its empty tiles) copies every path on it, octave copies and harmonies included. On any other grid the paste-paths sticker (×n) or Cmd/Ctrl+V pastes them all at once, each re-voiced for that grid's chord the way a single paste is (one undo) |
-| Cube ideas | On a cube's card, or with the pointer on a cube: Shift+↑ / Shift+↓ copies it an octave higher or lower as a glass layer above the grid or in its reflection below (up to two octaves each way), Alt+↑ / Alt+↓ adds a harmony a fourth or a fifth above or below that keeps clear of the other cubes' notes (hover the button to hear it first), U turns its path upside down |
-| Edit a cube | Hover it (a rounded outline marches around it) and click: it flies up beside its card. Instrument chip (click: pick a colour, right-click: mute, hold: solo), volume, the flat path grid (click to extend, drag a bead, drag the start ring to shift the path, pencil to redraw, reverse, path modes), the rhythm strip (click a note to select it, drag its right edge to stretch it, right-click for a rest, Backspace to delete it; the size row picks its length), and "more" (twin, shadow, echo, stamp, gate, octave). Esc or ✕ sends it back |
-| The loop while editing | Inspecting a cube loops its column so you hear the change in context (drawing waits for Space); Esc, a click on the sea or the ✕ on the rail's loop badge ends it and puts the transport back |
-| Sections | Every four measures make a section, lettered on its plinth in a circle of the letter's own colour (sections with the same chords share a letter and its colour) and bracketed on the column rail with the same coloured disc (pale until the section has its four measures), its measures numbered 1 to 4 and a short section's missing measures dotted; a section sparkles when it fills. Hover a plinth for its header: a name (intro, verse, chorus, bridge, drop, outro), split here, join with the next, duplicate, delete, drums (a Moon for this section) and launch into the next section. A column dropped inside a section joins it |
-| Stairs | The stairs card adds a staircase grid: one step per note, falling or climbing into the next chord, the grids after it standing on its height. Its header picks the kind (hover each to hear it; a star marks the one that fits the chord), the direction, the number of steps (3 to 8), the speed (as cube sizes) and a lead-in; with a cube in hand a click on a step makes that cube the runner |
-| Melody roll | The melody card adds a melody roll behind the column you are on: a piano roll in the colours of the chords it plays over, a dot on each safe note. With a cube in hand click or drag across its cells to place notes at the chosen size (right-click erases); drawing past its end grows it (½ → 1 → 2 → 4 → 8 measures, never across a section). Its header sets the length (or auto: as long as its notes), doubles it (the melody twice), switches between eighth and sixteenth cells, and sets the register and repeats |
-| Select many grids | Shift+drag a rectangle across grids (or Shift+click a grid, or a section's plinth for the whole section): they lift and shimmer, and a bar offers copy, paste after, delete, an octave up or down, repeat, extend through, a build-up into the next section and duplicate (Cmd+C, Cmd+V, Delete, Shift+↑ / Shift+↓ work too). Esc or a click on the sea clears it |
-| Drums | A Moon holds the kit rows; its dice rolls a new groove. A Moon plays from the part it sits under until the next Moon starts, gliding along with the song (dotted tracks on the sea and the rail show each drum part; a part with no Moon has no drums). N or the Moon card adds a Moon at the part you are on; drag a Moon sideways to move where it starts |
-| Play | The big play button or Space (hold the button to stop and rewind), Home stops, L loops, M metronome; drag or tap the tempo digits; the knob opens the sound drawer (swing, key, tone, space, weather, volume); scroll over an instrument cube for its volume |
-| Live punch-ins | Hold J stutter, K funnel, H half-time, B drop, E spotlight (while playing) |
-| Present | P or the sticker in the top right: the islands rise from the sea as their columns play while the camera slowly descends. Space pauses, Esc or P returns |
-| Camera | Drag the sea to pan, right-drag orbits, wheel zooms toward the cursor, two-finger sideways scroll or Shift+wheel pans, WASD / arrow keys pan, Tab / Shift+Tab next / previous island, click an island to frame it, O frames everything, hold Q / E to orbit, C resets the view, F follows the playing column |
-| Undo / redo, save / load | Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Cmd/Ctrl+S, Cmd/Ctrl+O, or the menu strip. The main menu writes an autosave (never over your save); starting a new song keeps a backup of the old one |
-| Shortcuts | ? (or "shortcuts" in the menu strip) opens a sheet of every key, each with its picture |
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/title.jpg" alt="The title screen"></td>
+    <td width="50%"><img src="docs/media/gallery.jpg" alt="The gallery shelf"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/cube-card.jpg" alt="A cube's card: its path and the timeline of its notes"></td>
+    <td width="50%"><img src="docs/media/keyboard-pop-in.jpg" alt="A keyboard popping in from the sea for its part"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/staircases.jpg" alt="Staircases falling into the next chord"></td>
+    <td width="50%"><img src="docs/media/riser.jpg" alt="A launch: the riser beam swelling into the next section"></td>
+  </tr>
+</table>
+
+Every note goes through one decision point (`VoiceRules`) that maps a tile, its chord and its voice to a pitch, so a pattern pasted onto another grid is re-voiced for that chord: an arpeggio keeps its shape, a bass line keeps its root, a melody moves by scale steps. The synth is [MeltySynth](https://github.com/sinshu/meltysynth) rendering the GeneralUser GS SoundFont on Unity's audio thread with a sample-accurate event queue; there is no native code. The module map is in [docs/architecture.md](docs/architecture.md) and every control is in [docs/controls.md](docs/controls.md).
+
+## The gallery
+
+The title screen's gallery holds six demo songs that imitate songs from a Japanese Vocaloid / J-pop MIDI corpus (their progressions, tempo, groove and form; the melodies are original) and **get proto**, a full MIDI rebuilt the way a player would build it: a chord card per bar, every voice in its own lane of chord grids, a staircase on every falling measure, a launch on every crash, the hook rewinding, drum Moons with their own kit. Open one, play it, take it apart.
+
+<p align="center"><img src="docs/media/stage-lights.jpg" width="80%" alt="The stage lights: the melody grid lit, the accompaniment dimmed"></p>
+
+The builder that writes them is `tools/gallery/` (`build_gallery.py --verify`; `midi_grid.py` turns a MIDI file into a song using the game's own cards, lanes and devices). See [docs/deacube-gallery.md](docs/deacube-gallery.md).
 
 ## Installation
 
@@ -75,36 +87,47 @@ cp AudioCube_Unity/Assets/StreamingAssets/api_config.env.example \
    AudioCube_Unity/Assets/StreamingAssets/api_config.env      # GEMINI_API_KEY=...   (optional)
 ```
 
-The env file is gitignored and never committed. The instrument bank (`GeneralUser-GS.sf2`, 32 MB) ships in `StreamingAssets`, so there is nothing to build.
+The env file is gitignored. The instrument bank (`GeneralUser-GS.sf2`, 32 MB) ships in `StreamingAssets`, so there is nothing to build.
 
 ## Quick start
 
-Open `AudioCube_Unity/` in Unity Hub, open `Assets/Scenes/SampleScene.unity` and press Play. Choose learn on the title screen for a guided first song, or new song to describe a vibe.
+Open `AudioCube_Unity/` in Unity Hub, open `Assets/Scenes/SampleScene.unity` and press Play. Choose **learn** on the title screen for a guided first song, **new song** to describe a vibe, or **gallery** to open a finished one.
+
+| Key | Does |
+|---|---|
+| Space | play / pause |
+| 1–9, 0 | pick up an instrument cube |
+| I | the deck of chord cards |
+| P | present mode |
+| ? | the shortcut sheet |
+
+## Quality checks
+
+The checks run inside Play mode from the editor and drive the mouse and keyboard by simulation (`Assets/DeaCube/Tests`). `V7Suites.RunAll(true, "")` runs every suite and writes `Captures/<suite>_report.txt` plus screenshots; pass suite names to run a subset.
+
+```csharp
+V7Suites.RunAll(true, "V9ChecksProto,V9ChecksLights")
+```
+
+There is no Test Runner suite.
 
 ## Limitations
 
-- Instruments come from a General MIDI SoundFont rendered in-process: 72 of its presets, in ten groups. VST and AU plug-ins cannot be hosted inside a Unity game. The synth's cost follows the notes sounding at once, not the number of instruments (the ten groups cost about 16 KB and one point of one CPU core over v5's ten sounds in a dense song); a larger bank (FluidR3, MuseScore General) can be dropped into `StreamingAssets` and named in `SynthEngine.SoundFontFile` without code changes.
-- A pressed tile plays a fixed-length note (it does not sustain while the button is held); a keyboard spans one to five octaves.
-- The cat's first-person view frames one measure of keys at a time (a wider keyboard slides along with the key you place); playing the song, or hearing the draft with Space, returns to your own view until you place the next note.
-- Chord generation via Gemini needs a live key; without one (or on a failed request) the dice builds a progression offline.
-- A column holds up to four islands (move a whole column by dragging its first island's triangle onto the cable).
-- The gallery songs borrow their sources' progressions, tempo, groove and form, but a column holds one chord, so progressions that change twice a bar move at half speed; their melodies are original. The shelf's preview approximates the world's voicing rules.
-- In the inspector a note stretches only up to its grid's capacity (the expand chip adds a measure); drawing grows the grid by itself while its section has room.
-- Changing a melody roll's length, cells or place rebuilds the song (the islands slide into place); seeking or changing the focus loop moves cubes, belts and towers straight to where they belong at that beat.
+- Instruments come from a General MIDI SoundFont rendered in-process: 79 of its presets in eleven groups. VST and AU plug-ins cannot be hosted inside a Unity game; a larger bank can be dropped into `StreamingAssets` and named in `SynthEngine.SoundFontFile`.
+- A pressed tile plays a fixed-length note (it does not sustain while held); a keyboard spans one to five octaves.
+- A column holds up to four islands, and one chord: progressions that change twice a bar move at half speed in the gallery songs.
+- Chord generation via Gemini needs a live key; without one the dice builds a progression offline.
 - Songs saved by earlier versions load as a single row of one-island columns.
-- Checks run inside Play mode from the editor (`Assets/DeaCube/Tests`: `V7Suites.RunAll` runs every suite, including `V6Integration` and `V7Integration`); there is no Test Runner suite. The checks drive the mouse and keyboard by simulation.
 
 ## Repository
 
 | Path | Contents |
 |---|---|
 | `AudioCube_Unity/Assets/` | Scene scripts: song, path and island managers, cubes, clock, camera, HUD |
-| `AudioCube_Unity/Assets/DeaCube/` | Menu, tutorial, inspector card, rhythm strip, length picker, island header, deck, merge, presentation, look (toon shaders, `Ink/` kit and HUD), rhythm, theory, state; `Audio/` holds SynthEngine, SynthBank and the vendored MeltySynth; `Tests/` holds the Play-mode checks |
-| `AudioCube_Unity/Assets/Fonts/` | Fredoka and Bangers (SIL Open Font License) |
-| `AudioCube_Unity/Assets/StreamingAssets/` | `GeneralUser-GS.sf2`, `api_config.env.example` |
-| `AudioCube_Unity/Assets/Resources/Gallery/` | The gallery's seven songs (six demos and get proto, built from `get_proto-2.mid`) and their index |
-| `tools/gallery/` | The python3 builder that writes the gallery songs from their song sheets and MIDI imports (`build_gallery.py --verify`; `midi_grid.py` builds a song from a MIDI file with the game's own cards, lanes and devices) |
-| `docs/` | Design specs for v2 to v7 (with the v4 UI language) and the gallery notes (`deacube-gallery.md`) |
+| `AudioCube_Unity/Assets/DeaCube/` | Menu, tutorial, inspector, island headers, deck, present mode, look (toon shaders, `Ink/` kit and HUD), theory, state; `Audio/` holds SynthEngine and the vendored MeltySynth; `Tests/` holds the Play-mode checks |
+| `AudioCube_Unity/Assets/Resources/Gallery/` | The gallery's seven songs and their index |
+| `tools/gallery/` | The python3 builder for the gallery songs and MIDI imports |
+| `docs/` | Design specs for v2 to v7, the gallery notes, [controls](docs/controls.md), [architecture](docs/architecture.md), README images in `media/` |
 | `AudioCube/` | Earlier JUCE prototype of a native audio backend; not used by the Unity scene |
 
 ## Acknowledgements

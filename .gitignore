@@ -31,9 +31,13 @@ resume/
 # MIDI files and screen recordings (local only)
 *.mid
 *.midi
+!sample.mid
 *.mov
 *.MOV
 *.mp4
 *.MP4
 Screen Recording*
 ScreenRecording*
+
+# Built apps (Unity player builds, JUCE demo binaries)
+*.app/

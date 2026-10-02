@@ -5,7 +5,7 @@ The demo songs of the title menu's gallery are written here as data and built in
 `docs/deacube-gallery.md`. Two kinds of songs:
 
 * the six "levels" imitating songs of the Japanese MIDI corpus, written as song SHEETS (`sheets/<id>.py`, SongState v4: chord islands);
-* v9: songs built from a MIDI file (`imports/<name>.py` + `midi_grid.py`): "get proto", the user's own `get_proto-2.mid`, built the way a
+* v9: songs built from a MIDI file (`imports/<name>.py` + `midi_grid.py`): "get proto", the user's own `sample.mid`, built the way a
   player builds a song: a chord card per bar, a lane of chord grids per voice, paths over the chord's tiles, the devices for its moments
   (stairs on every falling measure, launches on the crash bars, belts / rewind and vary, long grids and a pedal, nudges, lead keyboards,
   follow triads, octave copies; SongState v6). Round 1 (`midi_song.py`, keyboards playing the
