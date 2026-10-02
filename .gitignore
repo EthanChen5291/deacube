@@ -22,3 +22,18 @@ obj/
 .env
 env
 AudioCube_Unity/Assets/StreamingAssets/api_config.env
+# Editor screenshots
+AudioCube_Unity/Captures/
+
+# Personal resume (not part of DeaCube)
+resume/
+
+# MIDI files and screen recordings (local only)
+*.mid
+*.midi
+*.mov
+*.MOV
+*.mp4
+*.MP4
+Screen Recording*
+ScreenRecording*
