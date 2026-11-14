@@ -11,7 +11,7 @@
 
 </div>
 
-![Cubes walking their paths across a row of chord islands on the sea](docs/media/hero-lane.jpg)
+<p align="center"><img src="docs/media/hero-lane.jpg" width="85%" alt="Cubes walking their paths across a row of chord islands on the sea"></p>
 
 ## Overview
 
