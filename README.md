@@ -2,8 +2,6 @@
 
 # DeaCube
 
-**Compose music by designing motion.**
-
 [![Unity](https://img.shields.io/badge/unity-6000.4%20URP-black.svg)](#installation)
 [![Audio](https://img.shields.io/badge/audio-MeltySynth%20%C2%B7%20GeneralUser%20GS-orange.svg)](#how-it-works)
 [![Checks](https://img.shields.io/badge/checks-45%20play--mode%20suites-green.svg)](#quality-checks)
