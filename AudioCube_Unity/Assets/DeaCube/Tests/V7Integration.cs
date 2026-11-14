@@ -318,6 +318,9 @@ public static class V7Integration
         bool framed = tiles0.Count >= 4 && FrameTiles(tiles0);
         Check(framed, "the first grid's tiles are pickable from the test camera", "tiles " + tiles0.Count);
         if (!framed) { yield break; }
+        // Flow (2026-11-13): this step asserts v7's QUIET drawing (the song pauses) and CAPACITY (refusal + EXPAND) — the rules Flow replaces
+        // (a melody walks on instead: FlowChecksDraw) — so it runs with PathManager.Flow off, where they still hold; restored after the finish
+        PathManager.Flow = false;
         yield return SeekPlay(0);
         yield return Wait(0.6f);
         pm.PickUpCube(0);
@@ -357,6 +360,7 @@ public static class V7Integration
               "CAPACITY: two half notes fill a one-measure grid; the next note " + (allowAuto ? "auto-expands it (its section had room)" : "is refused (\"capacity reached\") inside a full section; EXPAND adds the measure and drawing continues"),
               capInfo + ", bars " + bars0 + " → " + (a0 != null ? a0.bars : -1));
         pm.FinishPath();
+        PathManager.Flow = true;
         yield return Wait(0.8f);
         a0 = SM.AnchorOf(0);
         var cube = NewestOn(a0);

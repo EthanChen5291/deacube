@@ -11,7 +11,8 @@ using UnityEngine;
 /// row does); the dot toggles dotted. When a cube is picked up the chosen size PULSES once ("the last used size is preselected and pulses once
 /// so the player notices it can be chosen"). The wheel over a grid and [ ] . (PathManager, package D) change the brush too: the row follows
 /// BrushTicks (polled every frame — no event needed). While a path is drawn the row stays (a press on it never finishes the draft:
-/// PathManager.DraftUiHover) and a small echo of it rides next to the cursor (CursorKit). It steps aside for the voice fan, mix mode, the
+/// PathManager.DraftUiHover) and a small echo of it rides next to the cursor (CursorKit) — Flow (2026-11-13, "only one size row while
+/// drafting"): with PathManager.Flow the row steps aside while a path is drawn (the draft row over the grid is the one size row; the echo stays). It steps aside for the voice fan, mix mode, the
 /// inspector and a hidden HUD. Hints id "sizeRow".
 /// </summary>
 [DefaultExecutionOrder(-50)]   // DraftUiHover is fresh before PathManager reads it (a press on the row must not finish the draft)
@@ -235,7 +236,8 @@ public class HudSizeRow : MonoBehaviour
         bool held = pm != null && pm.Hand == PathManager.HandKind.Cube;
         int g = held ? Mathf.Clamp(pm.selectedInstrument, 0, Instruments.Count - 1) : -1;
         bool anchor = held && col != null && col.Held >= 0 && col.LiftOf(col.Held) > 0.5f;
-        bool want = anchor && !col.FanOpen && !col.Mix && !CubeInspector.IsOpen && !Presenter.Active && !MainMenu.IsShown && HudAlpha() > 0.5f;
+        bool want = anchor && !col.FanOpen && !col.Mix && !CubeInspector.IsOpen && !Presenter.Active && !MainMenu.IsShown && HudAlpha() > 0.5f
+            && !PathManager.FlowDrawing;   // Flow: while a path is drawn the draft row over the grid is the ONE size row
         // the pick-up pulse: a new cube in the hand (or another group's)
         if (held && (!heldLast || g != lastGroup)) Pulse();
         heldLast = held; lastGroup = g;

@@ -253,7 +253,7 @@ public static class V2Checks
             sm.MoveMeasure(2, 0);
             if (SequenceMaster.Cubes.Count != cubesBefore) return "cubes " + SequenceMaster.Cubes.Count;
             if (sm.Islands.Count != names.Count || sm.Islands[0].measureIndex != 0) return "islands";
-            if (UIManager.I != null && UIManager.I.PillCount != sm.Islands.Count) return "pills " + UIManager.I.PillCount;
+            if (UIManager.I != null && UIManager.I.PillCount != sm.SectionCount) return "pills " + UIManager.I.PillCount;   // T: the rail's pills are sections now (was: one per island)
             if (sm.Islands[0].assignedChord != third || sm.Islands[1].assignedChord != names[0]) return "order after move: " + sm.Islands[0].assignedChord + "," + sm.Islands[1].assignedChord;
             foreach (var c in SequenceMaster.Cubes) if (cubesOn2.Contains(c.id) && c.assignedGridIndex != 0) return "cube " + c.id + " not remapped to 0";
             for (int i = 0; i < sm.PlayOrder.Count; i++) if (sm.PlayOrder[i] != i) return "PlayOrder identity";
@@ -452,11 +452,14 @@ public static class V2Checks
         Synth.StartRecording(12f);
         GlobalClock.Play();
         yield return null;
-        Run(sb, "punch strip active while playing", () =>
+        // Flow E2 (a quiet world): the punch-in pads are no longer drawn while playing — the keys J K H B do the punch-ins (was: "punch strip
+        // active while playing"); the strip stays built (UIManager.UpdatePunch reads the keys through its pads)
+        Run(sb, "punch strip built but not drawn while playing (Flow E2: the keys J K H B remain)", () =>
         {
             var hud = GameObject.Find("HUDCanvas"); if (hud == null) return "no HUDCanvas";
             var punch = hud.transform.Find("HUD/Transport/Punch"); if (punch == null) return "no punch strip";
-            return punch.gameObject.activeSelf ? null : "inactive while playing";
+            if (punch.childCount < 4) return "the strip lost its pads (" + punch.childCount + ")";
+            return !punch.gameObject.activeSelf ? null : "drawn while playing";
         });
 
         while (!Synth.RecordingDone) yield return null;
@@ -665,9 +668,16 @@ public static class V2Checks
                 dialRefreshed = dial.hits == 3 && dial.rot == 2;
                 dial.onBeadToggle(0); maskToggle = hc.hits == -2;
             }
+            else
+            {
+                // Flow E1 (2026-11-13): the necklace dial left the card's UI — its keys stay wired (UIManager: ] turns it)
+                int r0 = hc.rot;
+                KeyShim.Sim(KeyCode.RightBracket, true, true, false); UIManager.I.RunHotkeysForTest(); KeyShim.Clear();
+                rotReach = hc.rot == (r0 + 1) % Mathf.Max(1, hc.StepsPerBar);
+            }
             hc.SetHits(-1); hc.SetRot(0); hc.SetMask(0); hc.SetStep(st0);
         }
-        Run(sb, "HUD: a swatch + a mute per group (v9: 11), punch strip hidden when stopped, NecklaceDial.n == StepsPerBar (follows SetStep), dial setters reach the cube, sticker ring of 7 opens and picks, digits only on the tempo label among the v2 controls (v5: the ×n repeat sticker; v7: the v7 UI may count)", () =>
+        Run(sb, "HUD: a swatch + a mute per group (v9: 11), punch strip hidden when stopped, no necklace dial on the cube card (Flow E1: it left the UI; the ] key still turns it), sticker ring of 7 opens and picks, digits only on the tempo label among the v2 controls (v5: the ×n repeat sticker; v7: the v7 UI may count)", () =>
         {
             var hud = GameObject.Find("HUDCanvas"); if (hud == null) return "no HUDCanvas";
             var palette = hud.transform.Find("HUD/Palette"); if (palette == null) return "no Palette";
@@ -677,13 +687,9 @@ public static class V2Checks
             if (punchWhileStopped) return "punch strip active while stopped";
             var c = hudCube;
             if (c == null) return "no legacy cube";
-            if (!dialFound) return "no NecklaceDial (v4: InspectorCard.Dial for a legacy cube)";
-            if (dialN0 != expectN0) return "dial n " + dialN0 + " != StepsPerBar " + expectN0;
-            if (dialN8 != 8) return "dial n after SetStep(Eighth) " + dialN8;
-            if (!hitsReach) return "onHits did not reach SetHits";
-            if (!rotReach) return "onRot did not reach SetRot";
-            if (!dialRefreshed) return "dial not refreshed from the cube";
-            if (!maskToggle) return "bead toggle did not switch to the explicit mask";
+            // Flow E1 (2026-11-13, "BE SIMPLE AND MINIMALISTIC"): the necklace dial left the cube card's UI; its keys stay wired
+            if (dialFound) return "a NecklaceDial is still on the card (Flow E1 removed the necklace from the UI)";
+            if (!rotReach) return "] did not turn the necklace (its keys stay wired)";
             UIManager.I.OpenStickerRing(c, 1);
             var ring = hud.GetComponentInChildren<PopRing>(true); if (ring == null) return "sticker ring did not open";
             if (ring.Buttons.Count != 7) return "sticker ring has " + ring.Buttons.Count + " glyphs";

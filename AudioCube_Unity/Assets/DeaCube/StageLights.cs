@@ -281,9 +281,9 @@ public class StageLights : MonoBehaviour
                 // the measures of this window in which a note fires (Decide: rests, coins, mutes and a sleeping grid stay dark)
                 bars.Clear();
                 int lastBar = -1;
-                for (int k = 0; k < 4096; k++)
+                for (int k = c.FirstStepIn(w), g = 0; g < 4096; k++, g++)   // Flow (F1): a span cube's through window starts at its first own step
                 {
-                    float sl = c.StepStartLocalBeat(k);
+                    float sl = c.StepStartLocalBeat(k) - win.offset;
                     if (sl >= win.length - 1e-4f) break;
                     if (!c.Decide(w, k, win.order).fires) continue;
                     int b = Mathf.FloorToInt((sl + 1e-4f) / bpb);

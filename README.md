@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="AudioCube/Resources/Sprites/diacube_logo.png" width="420" alt="DeaCube">
+# DeaCube
 
 **Compose music by designing motion.**
 
@@ -11,7 +11,7 @@
 
 </div>
 
-![get proto playing: chord grids in voice lanes, staircases, raised towers and the melody under its spotlight](docs/media/hero-get-proto.jpg)
+![Cubes walking their paths across a row of chord islands on the sea](docs/media/hero-lane.jpg)
 
 ## Overview
 
@@ -62,7 +62,7 @@ A song reads left to right in columns. Islands stacked in a column play together
   </tr>
   <tr>
     <td width="50%"><img src="docs/media/staircases.jpg" alt="Staircases falling into the next chord"></td>
-    <td width="50%"><img src="docs/media/riser.jpg" alt="A launch: the riser beam swelling into the next section"></td>
+    <td width="50%"><img src="docs/media/thumbs/hero_close.png" alt="Cubes mid-walk on a chord island, seen from close and low"></td>
   </tr>
 </table>
 
@@ -71,8 +71,6 @@ Every note goes through one decision point (`VoiceRules`) that maps a tile, its 
 ## The gallery
 
 The title screen's gallery holds six demo songs that imitate songs from a Japanese Vocaloid / J-pop MIDI corpus (their progressions, tempo, groove and form; the melodies are original) and **get proto**, a full MIDI rebuilt the way a player would build it: a chord card per bar, every voice in its own lane of chord grids, a staircase on every falling measure, a launch on every crash, the hook rewinding, drum Moons with their own kit. Open one, play it, take it apart.
-
-<p align="center"><img src="docs/media/stage-lights.jpg" width="80%" alt="The stage lights: the melody grid lit, the accompaniment dimmed"></p>
 
 The builder that writes them is `tools/gallery/` (`build_gallery.py --verify`; `midi_grid.py` turns a MIDI file into a song using the game's own cards, lanes and devices). See [docs/deacube-gallery.md](docs/deacube-gallery.md).
 

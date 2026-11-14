@@ -31,6 +31,13 @@ using UnityEngine.UI;
 /// pencil) are off there — bead clicks (rest) and stickers stay. §19.1 "finished paths keep the cap": an append / extend that would pass the
 /// grid's capacity (PathManager.CapacityOf) is refused (a thud, the grid shakes) and a small "capacity reached" chip offers EXPAND
 /// (SongOps.ExpandGrid: + one measure, one History entry).
+/// Flow E1 (2026-11-13): INSERT — with a note selected in the rhythm strip (<see cref="HighlightNode"/>) a click on a cell (free or not) adds a
+/// note of the brush size (the card's size row) right AFTER it and the selection moves to the new note (<see cref="onInserted"/>), so clicks
+/// keep inserting in order; with nothing selected a click on a free cell extends the end, at the brush size too (a bead click stays rest on /
+/// off). A SPAN cube shows ONE grid of its chain (<see cref="SetView"/>: the card picks it — the selected note's grid, the strip part clicked,
+/// the playhead's), in that grid's colour, with the notes that START on it; a note added there lands on the grid that plays at its time (the
+/// engine's rule) and the view follows it. An edit that outgrows the pattern's capacity follows Flow (RhythmStrip.MakeRoom: the span grows, or
+/// the section's last grid does) — the capacity chip stays for PathManager.Flow off.
 /// </summary>
 public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 {
@@ -70,6 +77,25 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     public int CurrentNode => curNode;
     /// <summary>The node selected in the rhythm strip (-1 none): its bead wears an open ink ring.</summary>
     public int HighlightNode { get => highlight; set { if (highlight != value) { highlight = value; PlaceHighlight(); } } }
+    /// <summary>E1: a note was inserted after the selected one (its node index; the card moves the selection onto it) / appended at the end.</summary>
+    public Action<int> onInserted, onAppended;
+    /// <summary>E1: notes inserted after a selected note so far (tests).</summary>
+    public int InsertCount { get; private set; }
+    /// <summary>E1 (span): the grid of the cube's chain the view shows (null: the cube's own grid). Cheap when unchanged.</summary>
+    public void SetView(KeyBlock kb) { view = kb; }
+    KeyBlock view; int pendingInsert = -1, pendingAppend = -1;
+    readonly List<bool> beadVis = new List<bool>();
+    /// <summary>The grid shown for <paramref name="c"/>: the picked grid of its chain while its span reaches it, else its home grid.</summary>
+    KeyBlock ShownGrid(AudioCube c)
+    {
+        if (c == null) return null;
+        var home = c.Island;
+        if (view == null || view == home || c.span <= 0 || !c.HasThrough) return home;
+        for (int i = 0; i < c.windows.Count; i++) if (c.windows[i].through && c.windows[i].island == view) return view;
+        return home;
+    }
+    /// <summary>E1 (span): node <paramref name="i"/>'s bead is on the grid shown (always, for a cube without a span).</summary>
+    public bool BeadVisible(int i) => i >= 0 && i < beadVis.Count && beadVis[i];
     /// <summary>A start-ring drag is moving the whole path.</summary>
     public bool Shifting => g == G.Shift;
 
@@ -99,7 +125,7 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     Vector2 nudge; float nudgeT = 9f; float shakeT = 9f;
     readonly Dictionary<int, int> fanTotal = new Dictionary<int, int>(), fanSeen = new Dictionary<int, int>();
     // gesture state
-    enum G { None, Append, Extend, MoveNode, Bead, Pencil, Right, Shift }
+    enum G { None, Append, Extend, MoveNode, Bead, Pencil, Right, Shift, Insert }
     G g; int pressNode = -1; Vector2 pressLocal, lastLocal; float pressTime; bool moved, changed, popped, pressing, simPress, pencil;
     int shiftX, shiftZ; bool ringHover, cursorHeld;
     PopRing popover; int popoverClosedFrame = -9;
@@ -256,13 +282,14 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     /// <summary>Shows <paramref name="c"/>'s island and path (null clears). Cheap when nothing changed.</summary>
     public void Bind(AudioCube c)
     {
-        if (c != cube) { cube = c; pencil = false; ClosePopover(); g = G.None; pressing = false; curNode = -1; glowA = 0f; highlight = -1; ShowCapChip(false); }
-        var isl = c != null ? c.Island : null;
+        if (c != cube) { cube = c; pencil = false; ClosePopover(); g = G.None; pressing = false; curNode = -1; glowA = 0f; highlight = -1; view = null; pendingInsert = pendingAppend = -1; ShowCapChip(false); }
+        var isl = ShownGrid(c);
         if (isl != island || (isl != null && (cols != isl.cols || rows != isl.rows)))
         {
             island = isl;
             BuildCells();
             builtSig = int.MinValue;
+            curNode = -1; glowA = 0f; if (glowImg != null) glowImg.color = new Color(1f, 1f, 1f, 0f);   // (E1: another grid of the chain — the "cube is here" ring does not linger where it was on the last one)
         }
         RefreshCells(false);
         EnsureOverlay();
@@ -368,6 +395,8 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
             h = h * 31 + (int)cube.mode; h = h * 31 + cube.instrument; h = h * 31 + (cube.muted ? 1 : 0); h = h * 31 + (int)cube.step;
             h = h * 31 + (Instruments.Muted[Mathf.Clamp(cube.instrument, 0, Instruments.Count - 1)] ? 1 : 0);
             h = h * 31 + (island != null ? island.GetInstanceID() : 0);
+            if (cube.span > 0 && cube.HasThrough)   // E1: which grid of its chain each note starts on
+                for (int i = 0; i < cube.nodes.Count; i++) { var rt = cube.RealTile(i); h = h * 31 + (rt != null ? rt.GetInstanceID() : 0); }
             return h;
         }
     }
@@ -385,17 +414,20 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     void RebuildOverlay(int sig)
     {
         builtSig = sig;
-        beadPos.Clear(); beadGX.Clear(); beadGZ.Clear();
+        beadPos.Clear(); beadGX.Clear(); beadGZ.Clear(); beadVis.Clear();
         int n = cube != null && island != null ? cube.nodes.Count : 0;
+        bool chain = n > 0 && cube.span > 0 && cube.HasThrough;   // E1: a span cube — only the notes that start on the grid shown
+        for (int i = 0; i < n; i++) beadVis.Add(!chain || cube.GridOfNode(i) == island);
         // bead centres, repeated cells fanned out per visit
         if (n > 0)
         {
             fanTotal.Clear(); fanSeen.Clear();
-            for (int i = 0; i < n; i++) { var t = cube.nodes[i]; int key = t != null ? t.gridX * 64 + t.gridZ : -1; int v; fanTotal.TryGetValue(key, out v); fanTotal[key] = v + 1; }
+            for (int i = 0; i < n; i++) { if (!beadVis[i]) continue; var t = chain ? cube.RealTile(i) : cube.nodes[i]; int key = t != null ? t.gridX * 64 + t.gridZ : -1; int v; fanTotal.TryGetValue(key, out v); fanTotal[key] = v + 1; }
             for (int i = 0; i < n; i++)
             {
-                var t = cube.nodes[i];
+                var t = chain ? cube.RealTile(i) : cube.nodes[i];
                 int gx = t != null ? t.gridX : 0, gz = t != null ? t.gridZ : 0, key = t != null ? gx * 64 + gz : -1;
+                if (!beadVis[i]) { beadPos.Add(CellPos(Mathf.Clamp(gx, 0, cols - 1), Mathf.Clamp(gz, 0, rows - 1))); beadGX.Add(-9); beadGZ.Add(-9); continue; }
                 int k; fanSeen.TryGetValue(key, out k); fanSeen[key] = k + 1;
                 int m = fanTotal[key];
                 Vector2 p = CellPos(gx, gz);
@@ -417,17 +449,26 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
         pathInk.Clear();
         if (n >= 2)
         {
-            pathInk.Begin(); for (int i = 0; i < n; i++) pathInk.P(beadPos[i]); pathInk.EndLine(Ink, 9.5f);
-            pathInk.Begin(); for (int i = 0; i < n; i++) pathInk.P(beadPos[i]); pathInk.EndLine(col, 5f);
+            // (a span cube: one line per run of notes on this grid — a note that starts on another grid breaks it)
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = 0; i < n; )
+                {
+                    if (!beadVis[i]) { i++; continue; }
+                    int j = i; while (j + 1 < n && beadVis[j + 1]) j++;
+                    if (j > i) { pathInk.Begin(); for (int k = i; k <= j; k++) pathInk.P(beadPos[k]); if (pass == 0) pathInk.EndLine(Ink, 9.5f); else pathInk.EndLine(col, 5f); }
+                    i = j + 1;
+                }
             for (int i = 0; i + 1 < n; i++)
             {
+                if (!beadVis[i] || !beadVis[i + 1]) continue;
                 Vector2 a = beadPos[i], b = beadPos[i + 1], d = b - a;
                 float len = d.magnitude;
                 if (len > 30f) Chevron((a + b) * 0.5f, d / len, 5.5f, mark);
             }
         }
         PathMode mode = cube != null ? cube.mode : PathMode.Loop;
-        if (n >= 3 && mode == PathMode.Loop)
+        if (chain && n > 0 && !(beadVis[0] && beadVis[n - 1] && (n < 2 || beadVis[1]) && (n < 2 || beadVis[n - 2]))) { }   // (the path's ends are on other grids: no end marks here)
+        else if (n >= 3 && mode == PathMode.Loop)
         {
             Vector2 a = beadPos[n - 1], b = beadPos[0], d = b - a;
             float len = d.magnitude;
@@ -459,6 +500,14 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
             float size = BeadSize(i);
             beadBase[i] = size;
             var bd = TakeBead();
+            if (!beadVis[i])
+            {
+                // E1: a note of another grid of the chain — its slot stays (beads are indexed by node), nothing is drawn
+                bd.gameObject.SetActive(false);
+                if (glyphs[beadsUsed - 1].gameObject.activeSelf) glyphs[beadsUsed - 1].gameObject.SetActive(false);
+                var hg = nudgeGlyphs[beadsUsed - 1]; if (hg != null && hg.gameObject.activeSelf) hg.gameObject.SetActive(false);
+                continue;
+            }
             Centre(bd.rectTransform, beadPos[i], new Vector2(size, size));
             bd.Hollow = mod == 1;
             bd.color = mod == 2 ? Palette.A(col, 0.75f) : col;
@@ -493,7 +542,7 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
             else if (ng != null && ng.gameObject.activeSelf) ng.gameObject.SetActive(false);
         }
         for (int i = beadsUsed; i < beads.Count; i++) { if (beads[i].gameObject.activeSelf) beads[i].gameObject.SetActive(false); if (glyphs[i].gameObject.activeSelf) glyphs[i].gameObject.SetActive(false); if (nudgeGlyphs[i] != null && nudgeGlyphs[i].gameObject.activeSelf) nudgeGlyphs[i].gameObject.SetActive(false); }
-        startRing.gameObject.SetActive(n > 0);
+        startRing.gameObject.SetActive(n > 0 && beadVis[0]);
         if (n > 0) startRing.rectTransform.anchoredPosition = beadPos[0];
         glowImg.color = Palette.A(col, glowImg.color.a);
         if (curNode >= n) curNode = -1;
@@ -536,7 +585,7 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     void PlaceHighlight()
     {
         if (selRing == null) return;
-        bool on = highlight >= 0 && highlight < beadPos.Count && cube != null;
+        bool on = highlight >= 0 && highlight < beadPos.Count && cube != null && BeadVisible(highlight);
         if (selRing.gameObject.activeSelf != on) selRing.gameObject.SetActive(on);
         selRing.Boil = on;
         if (!on) return;
@@ -573,7 +622,7 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     {
         float dt = Time.unscaledDeltaTime;
         if (cube == null) { if (beadPos.Count > 0 || island != null) Bind(null); return; }
-        var isl = cube.Island;
+        var isl = ShownGrid(cube);
         if (isl != island || (isl != null && (isl.cols != cols || isl.rows != rows))) Bind(cube);
         RefreshCells(false);
         EnsureOverlay();
@@ -631,7 +680,7 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     {
         int now = -1;
         AudioCube.CubePose p;
-        if (GlobalClock.IsPlaying && cube.TryGetPose(out p) && p.active && p.hit.node >= 0 && p.hit.node < beadPos.Count) now = p.hit.node;
+        if (GlobalClock.IsPlaying && cube.TryGetPose(out p) && p.active && p.hit.node >= 0 && p.hit.node < beadPos.Count && BeadVisible(p.hit.node)) now = p.hit.node;
         if (now >= 0)
         {
             if (curNode < 0) glowPos = beadPos[now];
@@ -694,7 +743,7 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     /// <summary>The point is on node 0's ring (the band outside its bead, inside the ring) and no other bead is nearer.</summary>
     public bool OnStartRing(Vector2 lp)
     {
-        if (beadPos.Count == 0 || cube == null) return false;
+        if (beadPos.Count == 0 || cube == null || cube.span > 0 || !BeadVisible(0)) return false;   // (E1: a span cube's notes live on several grids — the whole path does not shift)
         float d = (lp - beadPos[0]).magnitude;
         float inner = Mathf.Max(beadBase[0] * 0.5f + 1f, 9f);
         if (d < inner || d > RingR + 6f) return false;
@@ -712,12 +761,13 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
         int best = -1; float bd = float.MaxValue;
         for (int i = 0; i < n; i++)
         {
+            if (!BeadVisible(i)) continue;
             float d = (beadPos[i] - lp).sqrMagnitude;
             bool same = inCell && beadGX[i] == cx && beadGZ[i] == cz;
             if (!same && d > 18f * 18f) continue;
             if (d < bd) { bd = d; best = i; }
         }
-        if (best >= 0 && best != n - 1 && beadGX[n - 1] == beadGX[best] && beadGZ[n - 1] == beadGZ[best] && (beadPos[n - 1] - lp).magnitude < Mathf.Sqrt(bd) + 8f) best = n - 1;
+        if (best >= 0 && best != n - 1 && BeadVisible(n - 1) && beadGX[n - 1] == beadGX[best] && beadGZ[n - 1] == beadGZ[best] && (beadPos[n - 1] - lp).magnitude < Mathf.Sqrt(bd) + 8f) best = n - 1;
         return best;
     }
 
@@ -769,19 +819,40 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
         }
         if (OnStartRing(lp)) { g = G.Shift; shiftX = cx; shiftZ = cz; startRing.Boil = true; return; }   // node 0's ring: move the whole path
         int bead = BeadAt(lp);
-        if (bead >= 0) { g = G.Bead; pressNode = bead; PopBead(bead); return; }
+        if (bead >= 0) { g = G.Bead; pressNode = bead; PopBead(bead); return; }   // (a click: rest on / off — with a note selected: that note again, Up)
         if (!inCell) return;
         var tile = island.GetTile(cx, cz); if (tile == null) return;
-        if (!Room(1)) return;   // v7 §19.1: the grid's capacity
-        cube.InsertNode(cube.nodes.Count, tile, 0);   // click an empty cell: append (non-adjacent is legal for playback)
-        g = G.Append; changed = true;
-        EnsureOverlay(); PopBead(cube.nodes.Count - 1); Preview(tile);
+        if (InsertMode) { InsertAfterSelected(tile); return; }   // E1: a note selected in the strip — the click inserts right after it
+        int brush = BrushTicks;
+        if (!Room(1, brush)) return;   // v7 §19.1: the pattern's capacity (E1 / Flow: it makes room first)
+        cube.InsertNode(cube.nodes.Count, tile, 0, cube.HasDurations ? brush : -1);   // click an empty cell: append at the brush size (non-adjacent is legal for playback)
+        g = G.Append; changed = true; pendingAppend = cube.nodes.Count - 1;
+        EnsureOverlay(); PopBead(cube.nodes.Count - 1); Preview(SoundTile(cube.nodes.Count - 1, tile));
+    }
+
+    /// <summary>E1: the size of the next note — the card's size row sets the hand's brush (PathManager.BrushTicks; a quarter without one).</summary>
+    static int BrushTicks => PathManager.I != null ? AudioCube.ClampTicks(PathManager.I.BrushTicks) : ProjectConfig.TicksPerBeat;
+    /// <summary>E1: a note is selected in the strip, so a click on the grid INSERTS after it (never on a derived path).</summary>
+    public bool InsertMode => cube != null && highlight >= 0 && highlight < cube.nodes.Count && !PathLocked && !pencil;
+    /// <summary>The tile node <paramref name="i"/> sounds on (a span cube: on the grid that plays at its time), else <paramref name="fallback"/>.</summary>
+    TileInteraction SoundTile(int i, TileInteraction fallback) { var t = cube != null && cube.span > 0 ? cube.RealTile(i) : null; return t != null ? t : fallback; }
+
+    /// <summary>E1 INSERT: a note of the brush size on <paramref name="tile"/> right after the selected note (a legacy cube is baked first: its
+    /// first rhythm edit); the later notes move back by its length. Refused (a thud) only when the pattern cannot make room.</summary>
+    void InsertAfterSelected(TileInteraction tile)
+    {
+        int at = highlight + 1, brush = BrushTicks;
+        RhythmStrip.BakeFor(cube);
+        if (!Room(1, brush)) return;
+        cube.InsertNode(at, tile, 0, cube.HasDurations ? brush : -1);
+        g = G.Insert; changed = true; pendingInsert = at; InsertCount++;
+        EnsureOverlay(); PopBead(at); Preview(SoundTile(at, tile));
     }
 
     void Move(Vector2 lp)
     {
         lastLocal = lp;
-        if (g == G.None || g == G.Right || cube == null || island == null || cube.nodes.Count == 0) return;
+        if (g == G.None || g == G.Right || g == G.Insert || cube == null || island == null || cube.nodes.Count == 0) return;
         if (!moved && (lp - pressLocal).magnitude * PxPerUnit > OrbitCamera.DragThresholdPx) moved = true;   // F17: the one DPI-aware threshold, in pixels
         if (g == G.Shift)
         {
@@ -832,7 +903,14 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
             g = G.None; pressNode = -1;
             return;
         }
-        if (g == G.Bead && !moved && !popped && cube != null && pressNode >= 0 && pressNode < cube.nodes.Count)
+        if (g == G.Bead && !moved && !popped && cube != null && InsertMode && pressNode >= 0 && pressNode < cube.nodes.Count)
+        {
+            // E1: with a note selected a click on a bead's cell is "that note again": it inserts after the selection like any other cell
+            var bt = cube.span > 0 ? cube.RealTile(pressNode) : cube.nodes[pressNode];
+            if (bt != null && bt.island != island) bt = island.GetTile(Mathf.Clamp(bt.gridX, 0, cols - 1), Mathf.Clamp(bt.gridZ, 0, rows - 1));
+            if (bt != null) InsertAfterSelected(bt);
+        }
+        else if (g == G.Bead && !moved && !popped && cube != null && pressNode >= 0 && pressNode < cube.nodes.Count)
         {
             cube.ToggleRest(pressNode);   // click a bead: rest on / off
             changed = true;
@@ -844,11 +922,15 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
         if (g == G.Shift) startRing.Boil = ringHover;
         if (changed) Commit();
         g = G.None; pressNode = -1; changed = false;
+        // E1: the selection moves onto an inserted note (clicks keep inserting in order); the view follows an appended one to its grid
+        int ins = pendingInsert, app = pendingAppend; pendingInsert = pendingAppend = -1;
+        if (ins >= 0 && cube != null && ins < cube.nodes.Count && onInserted != null) onInserted(ins);
+        else if (app >= 0 && cube != null && onAppended != null) onAppended(Mathf.Min(app, cube.nodes.Count - 1));
     }
 
     void ExtendToCell(int cx, int cz)
     {
-        var last = cube.nodes[cube.nodes.Count - 1];
+        var last = SoundTile(cube.nodes.Count - 1, cube.nodes[cube.nodes.Count - 1]);
         if (last == null) return;
         int x = last.gridX, z = last.gridZ, guard = 0;
         if (x == cx && z == cz) return;                  // consecutive duplicates are ignored
@@ -862,12 +944,14 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
             add.Add(t);
         }
         if (add.Count == 0) return;
-        if (!Room(add.Count)) return;   // v7 §19.1: the grid's capacity
-        var nodes = new List<TileInteraction>(cube.nodes); var mods = new List<int>(nodes.Count + add.Count);
+        int brush = BrushTicks;
+        if (!Room(add.Count, brush)) return;   // v7 §19.1: the pattern's capacity (E1 / Flow: it makes room first)
+        var nodes = cube.PathTiles(); var mods = new List<int>(nodes.Count + add.Count);
+        List<int> durs = cube.HasDurations ? new List<int>(cube.durs) : null;   // E1: the new notes take the brush size
         for (int i = 0; i < nodes.Count; i++) mods.Add(cube.ModOf(i));
-        foreach (var t in add) { nodes.Add(t); mods.Add(0); }
-        cube.SetPathAndMods(nodes, mods);
-        changed = true;
+        foreach (var t in add) { nodes.Add(t); mods.Add(0); if (durs != null) durs.Add(brush); }
+        cube.SetPathAndMods(nodes, mods, durs);
+        changed = true; pendingAppend = cube.nodes.Count - 1;
         EnsureOverlay(); PopBead(cube.nodes.Count - 1);
         Preview(add[add.Count - 1]);
     }
@@ -885,7 +969,7 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     {
         if (cube == null || n < 0 || n >= cube.nodes.Count || cube.nodes[n] == null) return;
         if (cube.NudgeAt(n) != 0 || cube.BendAt(n) != 0) InkUI.AuditionNote(cube, n, Mathf.Max(0.25f, cube.DurBeats(n)));
-        else cube.nodes[n].PlayPreview(cube.instrument, cube.octave, cube.voice);
+        else SoundTile(n, cube.nodes[n]).PlayPreview(cube.instrument, cube.octave, cube.voice);
     }
 
     void Commit()
@@ -904,18 +988,19 @@ public class PathGridView : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
     public bool CapacityChipShown => capChip != null && capChip.gameObject.activeInHierarchy;
     public void SimClickExpand() { if (CapacityChipShown) capChip.Click(); }
 
-    /// <summary>Room for <paramref name="nodesAdded"/> more notes at the last note's length on this grid; else refused (a thud, the grid shakes, the chip).</summary>
-    bool Room(int nodesAdded)
+    /// <summary>Room for <paramref name="nodesAdded"/> more notes of <paramref name="ticksEach"/> in the cube's pattern (its home grid, or its whole
+    /// chain). E1 / Flow: the pattern makes room first (RhythmStrip.MakeRoom: the span grows onto the lane's next grid, or the section's last
+    /// grid grows a measure); else refused — a thud, the grid shakes and (PathManager.Flow off) the "capacity reached" chip.</summary>
+    bool Room(int nodesAdded, int ticksEach)
     {
         if (cube == null || island == null || !cube.HasDurations) return true;
-        float cap = PathManager.CapacityOf(island);
-        if (cap <= 0f) return true;
-        float used = 0f; for (int i = 0; i < cube.nodes.Count; i++) used += cube.DurBeats(i);
-        float add = nodesAdded * cube.DurBeats(cube.nodes.Count - 1);
-        if (used + add <= cap + 1e-4f) return true;
+        int total = nodesAdded * ticksEach;
+        for (int i = 0; i < cube.durs.Count; i++) total += cube.durs[i];
+        if (RhythmStrip.MakeRoom(cube, total)) return true;
         CapacityRefusals++;
         Refuse();
         island.Shake(0.12f);
+        if (PathManager.FlowOn) return false;   // Flow: no words, no chip
         Onboarding.Notify(Onboarding.Ev.CapacityReached);
         ShowCapChip(true);
         return false;

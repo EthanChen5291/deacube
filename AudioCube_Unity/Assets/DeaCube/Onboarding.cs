@@ -129,10 +129,10 @@ public class Onboarding : MonoBehaviour
     /// <summary>Skip the tutorial (the bubble's ✕): marks it done.</summary>
     public static void Skip() { if (I != null) I.Finish(true); }
     /// <summary>Target id and event of a step (1-based), for tests.</summary>
-    public static string TargetOf(int s) => s >= 1 && s <= StepCount ? Steps[s - 1].target : null;
+    public static string TargetOf(int s) => s == SFinish && PathManager.FlowOn ? "draft.done" : (s >= 1 && s <= StepCount ? Steps[s - 1].target : null);   // Flow: the ✓ on the draft row
     public static string EventOf(int s) => s >= 1 && s <= StepCount ? Steps[s - 1].ev : null;
     public static bool IsInfoStep(int s) => s >= 1 && s <= StepCount && Steps[s - 1].info;
-    public static string TextOf(int s) => s >= 1 && s <= StepCount ? Steps[s - 1].text : null;
+    public static string TextOf(int s) => s == SFinish && PathManager.FlowOn ? FinishFlowText : (s >= 1 && s <= StepCount ? Steps[s - 1].text : null);
     /// <summary>The target the bubble is pointing at right now (a precondition hint may point elsewhere); null = centred.</summary>
     public static string ShownTarget => I != null ? I.shownTarget : null;
     /// <summary>The contextual tip on screen (null when none).</summary>
@@ -186,6 +186,9 @@ public class Onboarding : MonoBehaviour
     /// <summary>v6: the drawing step once a cube is in the hand (before: its own words, "pick a cube (the left column), then click tiles").
     /// v7 (§19.2, quiet drawing: the grid no longer loops while you draw): space plays what is there.</summary>
     public const string DrawText = "click a tile and keep clicking —\neach note plays; space plays them all";
+    /// <summary>Flow (SPEC flow §2): the finish step — the last tile again is the note again now; the pen goes up with a right-click, Enter or
+    /// the ✓ on the draft row (the bubble points at the ✓).</summary>
+    public const string FinishFlowText = "finish: right-click, enter\nor the ✓";
     /// <summary>v6 tips (SPEC v6 §7.5): ids and words.</summary>
     public const string TipPress = "press", TipCopy = "copyPaste", TipCarry = "carry", TipKeyboard = "keyboard", TipJobs = "jobs", TipTower = "tower", TipMoons = "moons";
     public const string PressText = "a click just plays a tile —\npick a cube to draw";
@@ -558,6 +561,7 @@ public class Onboarding : MonoBehaviour
 
         // resolve the target (or a precondition hint)
         string tgt = d.target, msg = d.text; bool info = d.info;
+        if (step == SFinish && PathManager.FlowOn) { msg = FinishFlowText; tgt = "draft.done"; }   // Flow: no "click the last tile again" — the ✓ on the draft row (right-click and Enter do the same)
         // v5 (package R's hearing tiles): the first step opens with "hover a tile to hear it" until two tiles have been heard (or 7 s);
         // v6: then "pick a cube (the left column), then click tiles" at the instrument column while the hand is empty, and "click a tile and
         // keep clicking" at the island once a cube is in the hand

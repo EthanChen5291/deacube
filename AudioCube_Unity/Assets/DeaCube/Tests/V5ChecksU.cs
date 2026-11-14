@@ -544,46 +544,44 @@ public static class V5ChecksU
     {
         var sm = SongManager.I; var rail = UIManager.I.Rail;
         if (rail == null) { Line(false, "rail", "missing"); yield break; }
+        // T (the owner, on the rail: "way too complicate … BE SIMPLE AND MINIMALISTIC"): the rail is one pill per section, as wide as the time it plays.
+        // The checks below were the v5 rail's (a bead + belt tails per pass, a tiny house on the home beads): each now holds the new rule.
         int i = Mathf.Min(2, sm.Islands.Count - 1);
         int col = sm.Islands[i].column;
         rail.CountNow();
-        float w1 = rail.ColumnWidth(col);
+        int sec = sm.SectionOf(col), m1 = rail.PillMeasures(sec);
+        float share1 = rail.ColumnWidth(col) / Mathf.Max(1f, rail.PillWidth(sec) - 2f * HudColumnRail.CellInset);
         int p0 = pushes;
         sm.SetRepeat(i, 3);
         yield return null; yield return null;
         rail.CountNow();
-        col = sm.Islands[i].column;
-        float scaleNow = rail.ColumnWidth(col) / Mathf.Max(1f, RailW(rail, col, 3));
-        float w3 = rail.ColumnWidth(col);
-        int bars = Mathf.Max(1, sm.Islands[i].bars);
-        float wantRatio = (HudColumnRail.FirstPassW(bars) + 2f * HudColumnRail.ExtraPassW(bars)) / HudColumnRail.FirstPassW(bars);
-        var others = new List<string>(); bool othersOk = true;
-        for (int j = 0; j < sm.Islands.Count; j++)
-        {
-            if (j == i) continue;
-            int want = sm.Islands[j].column == col ? Mathf.Clamp(sm.Islands[j].repeat, 1, 3) : Mathf.Clamp(sm.Islands[j].repeat, 1, 4);
-            if (rail.BeadPasses(j) != want) { othersOk = false; others.Add(j + ":" + rail.BeadPasses(j) + "≠" + want); }
-        }
-        Line(pushes - p0 == 1 && rail.PassesOf(col) == 3 && rail.BeadPasses(i) == 3 && othersOk && w3 > w1 * 1.5f,
-             "rail: an island at ×3 widens its column's beads by its passes (the bead + two belt tails), the other beads keep theirs",
-             "column " + col + " passes " + rail.PassesOf(col) + ", bead passes " + rail.BeadPasses(i) + ", width " + w1.ToString("F0") + " → " + w3.ToString("F0") + " (layout ratio " + wantRatio.ToString("F2") + ", scale " + scaleNow.ToString("F2") + ")" + (others.Count > 0 ? ", others " + string.Join(" ", others) : ""));
-        // the home house rides on exactly the home islands' beads
-        int homeOk = 0, homes = 0;
-        for (int j = 0; j < sm.Islands.Count; j++) { bool hme = Vibe.IsHome(sm.Islands[j].chordRootMIDI); if (hme) homes++; if (rail.BeadHome(j) == hme) homeOk++; }
-        Line(homeOk == sm.Islands.Count && homes > 0, "rail: a tiny house on exactly the beads of the key's home islands", homeOk + "/" + sm.Islands.Count + ", " + homes + " home");
+        col = sm.Islands[i].column; sec = sm.SectionOf(col);
+        int bars = Mathf.Max(1, sm.ColumnBars(col)), m3 = rail.PillMeasures(sec);
+        float share3 = rail.ColumnWidth(col) / Mathf.Max(1f, rail.PillWidth(sec) - 2f * HudColumnRail.CellInset);
+        float wantShare = sm.ColumnLength(col) / Mathf.Max(0.001f, sm.SectionEndBeat(sec) - sm.SectionStartBeat(sec));
+        Line(pushes - p0 == 1 && sm.ColumnPasses(col) == 3 && m3 == m1 + 2 * bars && Mathf.Abs(share3 - wantShare) < 0.005f && share3 > share1 + 0.01f,
+             "rail: an island at ×3 makes its section's pill two passes longer — the column takes the share of the pill it plays for (no bead, no belt tails)",
+             "column " + col + " passes " + sm.ColumnPasses(col) + ", pill measures " + m1 + " → " + m3 + ", the column's share of its pill " + share1.ToString("F2") + " → " + share3.ToString("F2") + " (its time: " + wantShare.ToString("F2") + ")");
+        // pills only: nothing per island (was: "a tiny house on exactly the beads of the key's home islands")
+        int homes = 0; for (int j = 0; j < sm.Islands.Count; j++) if (Vibe.IsHome(sm.Islands[j].chordRootMIDI)) homes++;
+        string only = RailChecks.PillsOnly(rail);
+        bool lettered = rail.PillsShown == sm.SectionCount;
+        for (int s = 0; s < sm.SectionCount; s++) lettered &= rail.PillLetter(s) == SectionHeader.LetterOf(s) && rail.PillColour(s) == SectionPlinth.LetterTint(rail.PillLetter(s));
+        Line(only == null && lettered, "rail: one pill per section in its letter's colour and nothing per island (no home house) with " + homes + " home islands in the song",
+             only ?? "pills " + rail.PillsShown + " = sections " + sm.SectionCount + ", islands " + sm.Islands.Count);
         // the playhead walks the passes (K's belt timeline: pass p of the column = its p-th slot)
         if (KPassesLive() && sm.PassLength(col) < sm.ColumnLength(col) - 0.01f)
         {
             float start = sm.ColumnStart(col), pl = sm.PassLength(col);
-            var got = new List<string>(); bool ok = true;
+            var got = new List<string>(); bool ok = true; float lastX = float.MinValue;
             for (int p = 0; p < 3; p++)
             {
                 GlobalClock.Seek(start + pl * (p + 0.5f));
                 yield return null; yield return null;
-                ok &= rail.PlayheadPass == p;
-                got.Add(p + "→" + rail.PlayheadPass + " x " + rail.PlayheadX.ToString("F0"));
+                ok &= rail.PlayheadPass == p && rail.PlayheadX > lastX + 1f && rail.CurrentSection == sm.SectionOf(col);
+                got.Add(p + "→" + rail.PlayheadPass + " x " + rail.PlayheadX.ToString("F0")); lastX = rail.PlayheadX;
             }
-            Line(ok, "rail: the playhead walks the passes (mid-pass p → slot p)", string.Join(", ", got));
+            Line(ok, "rail: the needle walks the passes (mid-pass p → further along its pill each pass, the pill it is in at full strength)", string.Join(", ", got));
             GlobalClock.Seek(start + pl * 1.5f);
             GlobalClock.Play();
             yield return Wait(0.6f);
@@ -632,13 +630,6 @@ public static class V5ChecksU
         IslandHeader.Hide();
         GlobalClock.Seek(0);
         LoadFixture(); yield return null;
-    }
-
-    static float RailW(HudColumnRail rail, int col, int passes)
-    {
-        var sm = SongManager.I; var a = sm.AnchorOf(col);
-        int bars = a != null ? Mathf.Max(1, a.bars) : 1;
-        return HudColumnRail.FirstPassW(bars) + (passes - 1) * HudColumnRail.ExtraPassW(bars);
     }
 
     // ------------------------------------------------------------------ 6. the cursor

@@ -38,6 +38,12 @@ public enum PathMode { Loop = 0, PingPong = 1, Once = 2 }
 /// home along its grid only right before it plays again (landing on the next window's first note; consecutive windows = a hop across the
 /// boundary like any next note) or right after the song resets (each cube a little out of sync); a stop sends it home in real time instead of
 /// the old snap.
+/// Flow (F1, SPEC flow §1) — SPAN: a cube with <see cref="span"/> ≥ 1 is ONE melody longer than its grid: after its home windows it gets THROUGH
+/// windows on the next grids of its lane (SongManager.SpanTargets), each with an <c>offset</c>, and the pattern's time runs on through them —
+/// pattern beat = (song − window.start) + window.offset wherever a step is derived. A step is realised on the grid whose window holds its START,
+/// on that grid's tile at the node's own (x, z) (<see cref="RealTile"/>: the exact tile, no pedal adaptation), so the line, the beads and the body
+/// cross the seam on the real tiles; a note may ring over a seam (it is never struck again at the next window's start). Every window of a span-0
+/// cube has offset 0, where all of this is today's math bit for bit.
 /// </summary>
 public partial class AudioCube : MonoBehaviour   // partial: the sphere piece lives in DeaCube/SphereBody.cs
 {
@@ -65,6 +71,10 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     public int layer;
     /// <summary>CLIMB (DeaCube/Climb.cs): 0 off, 1..3 = how many of the path's high points climb to the next chord tone above (every time it plays).</summary>
     public int climb;
+    /// <summary>Flow (F1) SPAN: the cube walks on through the next <c>span</c> grids of its home grid's lane (0..ProjectConfig.MaxCarry; 0 = its own
+    /// grid only). Its nodes stay tiles of the HOME grid — they carry each note's (x, z); where a note sounds and shows is <see cref="RealTile"/>.
+    /// Set with <see cref="SetSpan"/>.</summary>
+    public int span;
     /// <summary>v7: per node, semitones added to the tile's pitch (a harmony cube's 4ths / 5ths that are not tiles); empty = none. Kept aligned with the
     /// nodes like <see cref="durs"/> (a misaligned list is ignored: <see cref="BendAt"/> = 0).</summary>
     public List<int> bend = new List<int>();
@@ -75,7 +85,8 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     public List<int> nudges = new List<int>();
     /// <summary>The Moon this cube lives on (null for island residents; set by the Moon package).</summary>
     public KeyBlock Moon;
-    /// <summary>Grid offsets of the nodes on their home island; a Rider replays them on the island of every window (rows clamped).</summary>
+    /// <summary>Grid offsets of the nodes on their home island; a Rider replays them on the island of every window (rows clamped). Flow (F1): the
+    /// CELL of each note — for a span cube it may lie outside the home grid (a later grid of the lane is taller / wider: <see cref="cellX"/>).</summary>
     public readonly List<int> gridX = new List<int>(), gridZ = new List<int>();
 
     /// <summary>One playable time span of this cube in song beats (SPEC §2.10). Written only by SongManager.RecomputeMeasureStarts via SetWindows.</summary>
@@ -84,7 +95,11 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         public bool carried; public int hop;
         /// <summary>v7 (SPEC v7 §2.6 / §2.7): the pass of its column this window plays (0..; a carried window: the target column's pass); a flow
         /// window (a carried window of a flow-style island: pedal-adapted tiles, the cube glides in).</summary>
-        public int pass; public bool flow; }
+        public int pass; public bool flow;
+        /// <summary>Flow (F1) SPAN: a THROUGH window — the cube's one pattern going on on a later grid of its lane (hop = its place in the chain):
+        /// the tiles are that grid's own at each node's (x, z), and the pattern's time there starts at <c>offset</c> beats (the pass lengths of the
+        /// chain grids before it; 0 on every other kind of window).</summary>
+        public bool through; public float offset; }
     /// <summary>
     /// The pure rhythm decision for one step (§3.2). fires = a note is dispatched; node = where the cube is on this step (on a
     /// wait step: the node of the last hit); weight 0 ghost / 1 normal / 2 accent; ratchet = sub-hits (1 = single);
@@ -297,7 +312,9 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     // ------------------------------------------------------------------ path
     public void SetPath(List<TileInteraction> tiles)
     {
-        nodes = new List<TileInteraction>(tiles);
+        var t = new List<TileInteraction>(tiles);
+        HomeTiles(t);   // Flow (F1): a span cube may be handed the tiles of the later grids of its lane (a no-op without a span)
+        nodes = t;
         SyncLists();
         assignedGridIndex = Island != null ? Island.measureIndex : assignedGridIndex;
         pathNodes.Clear(); foreach (var n in nodes) pathNodes.Add(n.Top);
@@ -334,7 +351,68 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
             while (nudges.Count > n) nudges.RemoveAt(nudges.Count - 1);
         }
         gridX.Clear(); gridZ.Clear();
+        if (cellX.Count > 0 && (cellX.Count != n || cellZ.Count != n)) { cellX.Clear(); cellZ.Clear(); }   // Flow (F1): cells only while they line up with the nodes
+        if (cellX.Count > 0) { gridX.AddRange(cellX); gridZ.AddRange(cellZ); return; }
         for (int i = 0; i < n; i++) { gridX.Add(nodes[i] != null ? nodes[i].gridX : 0); gridZ.Add(nodes[i] != null ? nodes[i].gridZ : 0); }
+    }
+
+    // ---- Flow (F1) SPAN: cells outside the home grid. A note's tile is (x, z) on the grid that plays it; when a later grid of the lane is taller
+    // or wider than the home grid (a 9th after a 7th, a longer keyboard) the home grid has no tile for some of its cells — the node then keeps the
+    // home tile nearest to it (clamped) and its true cell here. Empty = every node's cell is its home tile's (every span-0 cube).
+    readonly List<int> cellX = new List<int>(), cellZ = new List<int>();
+    /// <summary>Flow (F1): true when some note's cell lies outside the home grid (see <see cref="PathTiles"/>).</summary>
+    public bool HasCells => cellX.Count > 0 && cellX.Count == nodes.Count;
+
+    /// <summary>
+    /// Flow (F1): a span cube's path may be handed the tiles the player clicked on the later grids of its lane. Each such tile becomes the HOME
+    /// grid's tile at its (x, z) (clamped) and its cell is kept, so the note sounds exactly that tile on the grid that plays it (RealTile). The home
+    /// grid = the cube's own when one of the tiles is on it, else the first tile's. A cube without a span takes its tiles as they are (today).
+    /// </summary>
+    void HomeTiles(List<TileInteraction> t)
+    {
+        cellX.Clear(); cellZ.Clear();
+        if (span <= 0 || t == null || t.Count == 0) return;
+        KeyBlock home = null, cur = Island;
+        if (cur != null) for (int i = 0; i < t.Count; i++) if (t[i] != null && t[i].island == cur) { home = cur; break; }
+        for (int i = 0; home == null && i < t.Count; i++) if (t[i] != null) home = t[i].island;
+        if (home == null || home.cols <= 0 || home.rows <= 0) return;
+        bool any = false;
+        for (int i = 0; i < t.Count; i++)
+        {
+            var x = t[i];
+            if (x == null) { cellX.Add(0); cellZ.Add(0); continue; }
+            cellX.Add(x.gridX); cellZ.Add(x.gridZ);
+            if (x.island == home) continue;
+            var h = home.GetTile(Mathf.Clamp(x.gridX, 0, home.cols - 1), Mathf.Clamp(x.gridZ, 0, home.rows - 1));
+            if (h == null) continue;   // (a hole in the home grid: the tile stays as it was handed in)
+            t[i] = h;
+            if (h.gridX != x.gridX || h.gridZ != x.gridZ) any = true;
+        }
+        if (!any) { cellX.Clear(); cellZ.Clear(); }
+    }
+
+    /// <summary>Flow (F1): the path as the tiles to hand back to SetPath / SetPathAndMods / InsertNode … — each node's own tile, or, for a note
+    /// whose cell is outside the home grid, a tile of its lane that has that cell (the one it is realised on when that grid has it). Use this, not
+    /// <see cref="nodes"/>, to rebuild a span cube's path: nodes alone would pull such a note back onto the home grid's edge.</summary>
+    public List<TileInteraction> PathTiles()
+    {
+        var r = new List<TileInteraction>(nodes);
+        if (!HasCells) return r;
+        for (int i = 0; i < r.Count; i++)
+        {
+            var h = r[i];
+            if (h == null || (cellX[i] == h.gridX && cellZ[i] == h.gridZ)) continue;
+            var rt = RealTile(i);
+            if (rt != null && rt.gridX == cellX[i] && rt.gridZ == cellZ[i]) { r[i] = rt; continue; }
+            for (int c = chainLen - 1; c >= 1; c--)
+            {
+                var kb = chainIsl[c];
+                if (kb == null || cellX[i] >= kb.cols || cellZ[i] >= kb.rows) continue;
+                var ct = kb.GetTile(cellX[i], cellZ[i]);
+                if (ct != null) { r[i] = ct; break; }
+            }
+        }
+        return r;
     }
 
     /// <summary>The sticker on a node (0 none 1 rest 2 ghost 3 accent 4 ratchet2 5 ratchet3 6 coin 7 tie 8 lift).</summary>
@@ -389,7 +467,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
             int mod = ModOf(i);
             bool rest = mod == 1;
             float wscale = mod == 2 ? 0.75f : (mod == 3 ? 1.3f : 1f);          // bead radius = weight
-            float s = (i == 0 ? 0.46f : (rest ? 0.34f : 0.27f)) * wscale * SizeOf(DurBeats(i)) * FootOf(nodes[i]);   // v4 R2: x the note's length (legacy: the step); v6: smaller on keys
+            float s = (i == 0 ? 0.46f : (rest ? 0.34f : 0.27f)) * wscale * SizeOf(DurBeats(i)) * FootOf(NodeTile(i));   // v4 R2: x the note's length (legacy: the step); v6: smaller on keys
             Vector3 bead = BeadPosition(i);   // v6: repeated visits of a tile fan out
             int nd = NudgeAt(i);   // v9 (N): a nudged bead sits a touch higher (a lowered one keeps the tile: its ▼ says so)
             bead += Vector3.up * (0.04f * Mathf.Max(0, nd));
@@ -441,7 +519,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
                 var tr = ticks[t++];
                 tr.gameObject.SetActive(true);
                 float u = (j + 1f) / (tps + 1f);
-                tr.position = Vector3.Lerp(TopOf(nodes[i]), TopOf(nodes[i + 1]), u) + Vector3.up * 0.03f;
+                tr.position = Vector3.Lerp(TopOf(NodeTile(i)), TopOf(NodeTile(i + 1)), u) + Vector3.up * 0.03f;
                 float ts = step == StepLen.Triplet ? 0.07f : 0.09f;
                 tr.localScale = new Vector3(ts, 1f, ts);
             }
@@ -457,9 +535,15 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         if (i < 0 || i >= nodes.Count || nodes[i] == null) return transform.position;
         var t = nodes[i];
-        Vector3 top = TopOf(t);   // v7: a layer cube's beads sit in its layer (on W's glass grid)
         int occ = 0, total = 0;
-        for (int j = 0; j < nodes.Count; j++) if (nodes[j] == t) { if (j < i) occ++; total++; }
+        if (hasThrough)
+        {
+            // SPAN: the bead sits on the tile the note is realised on (a later grid of the lane), and visits are counted on those tiles
+            t = RealTile(i);
+            for (int j = 0; j < nodes.Count; j++) if (RealTile(j) == t) { if (j < i) occ++; total++; }
+        }
+        else for (int j = 0; j < nodes.Count; j++) if (nodes[j] == t) { if (j < i) occ++; total++; }
+        Vector3 top = TopOf(t);   // v7: a layer cube's beads sit in its layer (on W's glass grid)
         if (total <= 1) return top;
         if (t.island != null && t.island.IsKeyboard) return top + new Vector3(0f, 0.02f * occ, ((total - 1) * 0.5f - occ) * RepeatStep);
         float a = (90f + 360f * occ / total) * Mathf.Deg2Rad;
@@ -672,8 +756,9 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     public int StepsInWindow(int w)
     {
         float len = w >= 0 && w < windows.Count ? windows[w].length : measureLength;
-        if (HasDurations) { int k; float p; ComputeStep(len - 1e-4f, out k, out p); return Mathf.Max(1, k + 1); }
-        return Mathf.Max(1, Mathf.RoundToInt(len / StepBeats));
+        float off = WindowOffset(w);   // SPAN: a through window counts in pattern steps (one past its last step)
+        if (HasDurations) { int k; float p; ComputeStep(len - 1e-4f + off, out k, out p); return Mathf.Max(1, k + 1); }
+        return Mathf.Max(1, Mathf.RoundToInt((len + off) / StepBeats));
     }
 
     /// <summary>The chord island lit while step k of window w plays (a Moon reads the lit island's energy and fill). v4 R5: the ANCHOR of the
@@ -695,7 +780,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     bool InLastBar(int w, int k)
     {
         float len = w >= 0 && w < windows.Count ? windows[w].length : measureLength;
-        return StepStartLocalBeat(k) >= len - GlobalClock.BeatsPerBar - 1e-4f && IsLastPassWindow(w);
+        return StepStartLocalBeat(k) - WindowOffset(w) >= len - GlobalClock.BeatsPerBar - 1e-4f && IsLastPassWindow(w);
     }
 
     /// <summary>v5: window w is its island's last pass in its column (always true without a belt).</summary>
@@ -786,11 +871,11 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         var result = new List<int>();
         if (windowIndex < 0 || windowIndex >= windows.Count) return result;
-        float length = windows[windowIndex].length;
+        float length = windows[windowIndex].length, off = windows[windowIndex].offset;
         int max16 = Mathf.Max(1, Mathf.RoundToInt(length * 4f));
-        for (int k = 0; k < 4096; k++)
+        for (int k = FirstStepIn(windowIndex), g = 0; g < 4096; k++, g++)
         {
-            float sl = StepStartLocalBeat(k);
+            float sl = StepStartLocalBeat(k) - off;
             if (sl >= length - 1e-4f) break;
             if (!Decide(windowIndex, k, pass).fires) continue;
             int s16 = Mathf.Clamp(Mathf.RoundToInt(sl * 4f), 0, max16 - 1);
@@ -809,20 +894,39 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         bool same = w != null && w.Count == windows.Count;
         if (same)
             for (int i = 0; i < w.Count; i++)
-            {
-                Window a = w[i], b = windows[i];
-                if (a.start != b.start || a.length != b.length || a.island != b.island || a.order != b.order || a.silent != b.silent || a.carried != b.carried || a.hop != b.hop || a.pass != b.pass || a.flow != b.flow) { same = false; break; }
-            }
+                if (!SameWindow(w[i], windows[i])) { same = false; break; }
+        // SPAN: only through windows came or went behind an unchanged list (SetSpan while the song plays — a draft growing onto the next grid):
+        // the windows before them keep their notes, so the sounding ones ring on and the cursors stay
+        bool tailOnly = false;
+        if (!same && w != null)
+        {
+            int common = 0, m = Mathf.Min(w.Count, windows.Count);
+            while (common < m && SameWindow(w[common], windows[common])) common++;
+            tailOnly = common > 0;
+            for (int i = common; tailOnly && i < w.Count; i++) if (!w[i].through) tailOnly = false;
+            for (int i = common; tailOnly && i < windows.Count; i++) if (!windows[i].through) tailOnly = false;
+        }
         if (!same) { windows.Clear(); if (w != null) windows.AddRange(w); }
         if (windows.Count > 0) { startBeatOffset = windows[0].start; measureLength = windows[0].length; }
         if (same) return;
         hasCarried = false;
         for (int i = 0; i < windows.Count; i++) if (windows[i].carried) { hasCarried = true; break; }
+        bool hadThrough = hasThrough;
+        RebuildSpan();
         hopSig = int.MinValue; hopFrame = -1;   // v6: the adapted tiles are rebuilt on the next read
         motionVersion++;                        // v7: the fling / runner plans follow the windows
-        lastStep = -1; lastWindow = -1; windowIdx = 0; hopping = false;
-        CancelPending();
+        if (tailOnly) SoftReschedule();
+        else
+        {
+            lastStep = -1; lastWindow = -1; windowIdx = 0; hopping = false;
+            CancelPending();
+        }
+        if (hadThrough || hasThrough) RefreshLine();   // SPAN: the beads of the notes on the lane's later grids follow the chain
     }
+
+    static bool SameWindow(Window a, Window b)
+        => a.start == b.start && a.length == b.length && a.island == b.island && a.order == b.order && a.silent == b.silent && a.carried == b.carried
+           && a.hop == b.hop && a.pass == b.pass && a.flow == b.flow && a.through == b.through && a.offset == b.offset;
 
     /// <summary>Cubes that never received windows (drawn before the first RecomputeMeasureStarts) get one from the legacy fields.</summary>
     void EnsureWindow()
@@ -831,7 +935,8 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     }
 
     /// <summary>The tile node <paramref name="node"/> plays in window <paramref name="w"/>: the home tile for a resident or Moon
-    /// cube; for a Rider, the window island's tile at the same grid offsets (rows clamped).</summary>
+    /// cube; for a Rider, the window island's tile at the same grid offsets (rows clamped). Flow (F1): a THROUGH window (a span cube on a later
+    /// grid of its lane) plays that grid's tile at the node's (x, z) — the tile the player clicked.</summary>
     public TileInteraction TileAt(int w, int node)
     {
         if (node < 0 || node >= nodes.Count) return null;
@@ -843,6 +948,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
             var ht = HopTiles(windows[w].hop);
             if (ht != null && node < ht.Count && ht[node] != null) return ht[node];
         }
+        else if (windows[w].through) { }   // SPAN: that grid's own tile at the node's (x, z) (below) — never adapted, climbed or varied
         else if (climb > 0 && windows[w].island != null && windows[w].island == Island && ClimbedAt(node) != null) return ClimbedAt(node);   // CLIMB: a high point rises
         else if (windows[w].pass >= 1 && windows[w].island != null && windows[w].island == Island && windows[w].island.vary >= 1)
         {
@@ -866,7 +972,24 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         if (island == null) return r;
         if (island == Island) { r.AddRange(nodes); return r; }
         for (int w = 0; w < windows.Count; w++)
-            if (windows[w].island == island) { for (int n = 0; n < nodes.Count; n++) { var t = TileAt(w, n); if (t != null) r.Add(t); } break; }
+        {
+            if (windows[w].island != island) continue;
+            if (windows[w].through)
+            {
+                // SPAN: the notes that START in its first window there, in play order (the others belong to other grids of the chain)
+                float len = windows[w].length, off = windows[w].offset;
+                for (int k = FirstStepIn(w), g = 0; g < 512; k++, g++)
+                {
+                    if (StepStartLocalBeat(k) - off >= len - 1e-4f) break;
+                    if (!PatternHit(k)) continue;
+                    var t = TileAt(w, NodeForHit(HitIndex(k) + Mathf.Max(0, phase)));
+                    if (t != null) r.Add(t);
+                }
+                break;
+            }
+            for (int n = 0; n < nodes.Count; n++) { var t = TileAt(w, n); if (t != null) r.Add(t); }
+            break;
+        }
         return r;
     }
 
@@ -1044,7 +1167,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     /// <summary>v7: node <paramref name="node"/> plays another tile than its own in window <paramref name="w"/> (a varied note: W's sparkle).</summary>
     public bool IsVaried(int w, int node)
     {
-        if (w < 0 || w >= windows.Count || node < 0 || node >= nodes.Count || windows[w].carried) return false;
+        if (w < 0 || w >= windows.Count || node < 0 || node >= nodes.Count || windows[w].carried || windows[w].through) return false;
         var t = TileAt(w, node);
         return t != null && t != nodes[node];
     }
@@ -1157,7 +1280,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     public bool OnMyGrid(KeyBlock kb)
     {
         if (kb == null || kb == Island) return true;
-        for (int i = 0; i < windows.Count; i++) if (windows[i].carried && windows[i].island == kb) return true;
+        for (int i = 0; i < windows.Count; i++) if ((windows[i].carried || windows[i].through) && windows[i].island == kb) return true;   // (F1: + the grids its span walks on)
         return false;
     }
 
@@ -1257,7 +1380,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     }
 
     /// <summary>Beats of the trip before window <paramref name="w"/>: FlightBeats before a later measure of the long grid, else ReturnBeats.</summary>
-    float ReturnBeatsFor(int w) => w >= 0 && w < windows.Count && windows[w].carried ? FlightBeats : ProjectConfig.ReturnBeats;
+    float ReturnBeatsFor(int w) => w >= 0 && w < windows.Count && (windows[w].carried || windows[w].through) ? FlightBeats : ProjectConfig.ReturnBeats;
 
     /// <summary>Beats of the trip home after a reset from <paramref name="from"/>: a beat over its own measure, up to two from a far measure of its long grid.</summary>
     float ResetTripOf(TileInteraction from, TileInteraction to)
@@ -1414,7 +1537,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         zipPts.Clear();
         zipPts.Add(PosAtLocal(a, zipStart));
         int k0; float pr;
-        ComputeStep(Mathf.Clamp(zipStart, 0f, Mathf.Max(0f, windows[a].length - 1e-3f)), out k0, out pr);
+        ComputeStep(Mathf.Clamp(zipStart, 0f, Mathf.Max(0f, windows[a].length - 1e-3f)) + windows[a].offset, out k0, out pr);
         var h0 = Decide(a, k0, PassOf(a, 0));
         int n = nodes.Count, cur = Mathf.Clamp(h0.node >= 0 ? h0.node : EndNode, 0, n - 1), home = Mathf.Clamp(HomeNode, 0, n - 1);
         int stepDir = reverse ? 1 : -1;
@@ -1466,20 +1589,29 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     bool CrossStep(int a, float local, int k, Hit cur)
     {
         var win = windows[a];
-        if (StepStartLocalBeat(k + 1) < win.length - 1e-4f) return false;   // not its last stay in the window yet
+        float wend = win.length + win.offset;   // SPAN: local and the step starts are pattern beats (= window beats when the offset is 0)
+        if (StepStartLocalBeat(k + 1) < wend - 1e-4f) return false;   // not its last stay in the window yet
         int w; double nStart; int loops;
         if (!NextAudibleWindowFrom(win.start + win.length - 1e-4f, out w, out nStart, out loops) || w == a && loops == 0) return false;
         if (Math.Abs(nStart - (win.start + win.length)) > 1e-3) return false;   // a gap: OutsidePose travels in it
         var nw = windows[w];
         if (nw.island != win.island && !(OnMyGrid(nw.island) && OnMyGrid(win.island))) return false;   // §21: never onto another grid
-        var ta = TileAt(a, cur.node >= 0 ? cur.node : EndNode);
+        var ta = TileOfStep(a, k, cur.node >= 0 ? cur.node : EndNode);
         var tb = TileAtLocal(w, 0f);
-        if (ta == null || tb == null || ta == tb) return false;
-        float s0 = StepStartLocalBeat(k), len = Mathf.Max(1e-3f, win.length - s0);
+        if (ta == null || tb == null || ta == tb) return false;   // (SPAN: a note ringing over the seam keeps the cube on its tile: the same step, the same tile)
+        float s0 = StepStartLocalBeat(k), len = Mathf.Max(1e-3f, wend - s0);
         float pr = Mathf.Clamp01((local - s0) / len);
         float hs = Mathf.Max(ProjectConfig.snapThreshold, 1f - ProjectConfig.HopMaxBeats / len);
         if (pr < hs) return false;
         float f = (pr - hs) / Mathf.Max(1e-4f, 1f - hs);
+        if (hasThrough && nw.island != win.island && (loops > 0 || nw.start < win.start))
+        {
+            // SPAN: the chain's end runs straight into its start again (a loop over just these grids): the cube skips back along the grids in
+            // small hops — the trip home's look — instead of one long flat hop over several grids
+            HopGlide(PoseOn(ta), tb, f);
+            tripOn = true; tripPos = transform.position;
+            return true;
+        }
         if (win.island != null && win.island.IsStairs) StairHop(ta, tb, f);
         else Hop(ta, tb, f, 1f, len <= 0.25f ? 0.6f : 1f);
         if (nw.island != win.island)
@@ -1505,13 +1637,14 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         if (layer == 0) return 1f;
         var win = windows[a];
+        float wend = win.length + win.offset;   // SPAN: local and the step starts are pattern beats
         float ph = 0f;
         float s0 = StepStartLocalBeat(k);
         if (cur.hit && cur.fires)
         {
-            float end = win.length;
-            if (HasDurations) end = Mathf.Min(win.length, StepStartLocalBeat(k + 1));
-            else { int nx = NextPatternHitStep(k, win.length); if (nx >= 0) end = StepStartLocalBeat(nx); }
+            float end = wend;
+            if (HasDurations) end = Mathf.Min(wend, StepStartLocalBeat(k + 1));
+            else { int nx = NextPatternHitStep(k, wend); if (nx >= 0) end = StepStartLocalBeat(nx); }
             ph = local < end ? 1f : 1f - Mathf.Clamp01((local - end) / PhaseOutBeats);
         }
         else if (k > 0 && local - s0 < PhaseOutBeats)
@@ -1519,7 +1652,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
             var prev = Decide(a, k - 1, pass);
             if (prev.hit && prev.fires) ph = 1f - Mathf.Clamp01((local - s0) / PhaseOutBeats);
         }
-        int nh = NextPatternHitStep(k, win.length);
+        int nh = NextPatternHitStep(k, wend);
         if (nh >= 0)
         {
             float d = StepStartLocalBeat(nh) - local;
@@ -1529,7 +1662,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         {
             int w; double nStart; int loops;
             if (NextAudibleWindowFrom(win.start + win.length - 1e-4f, out w, out nStart, out loops) && !(w == a && loops == 0))
-                ph = Mathf.Max(ph, LeadInPhase(w, nStart, win.start + local));
+                ph = Mathf.Max(ph, LeadInPhase(w, nStart, win.start + (local - win.offset)));
         }
         return ph;
     }
@@ -1540,7 +1673,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         if (layer == 0 || w < 0 || w >= windows.Count) return 1f;
         double d = nStart - song;
         if (d >= PhaseInBeats || d < 0) return 0f;
-        var h = Decide(w, 0, PassOf(w, 0));
+        var h = Decide(w, FirstStepIn(w), PassOf(w, 0));
         return h.hit && h.fires ? 1f - (float)(d / PhaseInBeats) : 0f;
     }
 
@@ -1698,10 +1831,10 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         var win = windows[w];
         int k; float pr;
-        ComputeStep(Mathf.Clamp(local, 0f, Mathf.Max(0f, win.length - 1e-3f)), out k, out pr);
+        ComputeStep(Mathf.Clamp(local, 0f, Mathf.Max(0f, win.length - 1e-3f)) + win.offset, out k, out pr);
         var h = Decide(w, k, PassOf(w, 0));
         int node = h.node >= 0 ? h.node : EndNode;
-        return TileAt(w, Mathf.Clamp(node, 0, nodes.Count - 1));
+        return TileOfStep(w, k, Mathf.Clamp(node, 0, nodes.Count - 1));
     }
 
     /// <summary>Where the playback pose puts the body at window-local beat <paramref name="local"/> of window <paramref name="w"/> (on its tile, or
@@ -1709,16 +1842,17 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     Vector3 PosAtLocal(int w, float local)
     {
         var win = windows[w];
-        local = Mathf.Clamp(local, 0f, Mathf.Max(0f, win.length - 1e-3f));
+        local = Mathf.Clamp(local, 0f, Mathf.Max(0f, win.length - 1e-3f)) + win.offset;   // SPAN: pattern beats from here on
+        float wend = win.length + win.offset;
         int k; float p;
         ComputeStep(local, out k, out p);
         int pass = PassOf(w, 0);
         Hit cur = Decide(w, k, pass);
-        var ta = TileAt(w, cur.node >= 0 ? cur.node : EndNode);
+        var ta = TileOfStep(w, k, cur.node >= 0 ? cur.node : EndNode);
         if (ta == null) return transform.position;
         Vector3 pa = RestPosition(ta, StackSlot(ta));
-        int nh = NextPatternHitStep(k, win.length);
-        bool stepEndsWindow = StepStartLocalBeat(k + 1) >= win.length - 1e-4f;
+        int nh = NextPatternHitStep(k, wend);
+        bool stepEndsWindow = StepStartLocalBeat(k + 1) >= wend - 1e-4f;
         Hit nb = nh >= 0 ? Decide(w, nh, pass) : new Hit { node = -1 };
         float hs = ProjectConfig.snapThreshold, arcScale = StepBeats <= 0.25f ? 0.6f : 1f;
         if (HasDurations)
@@ -2300,17 +2434,19 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         into.Clear();
         if (nodes.Count == 0) return 0;
         float length = window >= 0 && window < windows.Count ? windows[window].length : measureLength;
+        float off = WindowOffset(window);                       // SPAN: a through window's events are the steps that START in it (window-local)
+        bool ring = hasThrough && RingLength(window) > length;   // ... and a note there may ring past its end (the next grid goes on with it)
         int pass = PassOf(window, 0);
         bool dur = HasDurations;
-        for (int k = 0; k < 4096; k++)
+        for (int k = FirstStepIn(window), g = 0; g < 4096; k++, g++)
         {
-            float s = StepStartLocalBeat(k);
+            float s = StepStartLocalBeat(k) - off;
             if (s >= length - 1e-4f) break;
             var h = Decide(window, k, pass);
             if (!h.hit) continue;
             float e;
-            if (dur) e = Mathf.Min(length, StepStartLocalBeat(k + 1));
-            else { int nh = NextPatternHitStep(k, length); e = nh >= 0 ? StepStartLocalBeat(nh) : length; }
+            if (dur) e = ring ? StepStartLocalBeat(k + 1) - off : Mathf.Min(length, StepStartLocalBeat(k + 1) - off);
+            else { int nh = NextPatternHitStep(k, length + off); e = nh >= 0 ? StepStartLocalBeat(nh) - off : length; }
             into.Add(new TimelineEvent { k = k, node = h.node, start = s, len = Mathf.Max(0.01f, e - s), rest = h.mod == 1, mod = h.mod });
         }
         return into.Count;
@@ -2345,16 +2481,16 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         if (a < 0 || windows[a].silent) return false;
         Window win = windows[a];
         int k; float prog;
-        ComputeStep(song - win.start, out k, out prog);
+        ComputeStep(song - win.start + win.offset, out k, out prog);   // SPAN: the pattern beat (a through window's offset; 0 elsewhere)
         int pass = PassOf(a, 0);
-        p.active = true; p.window = a; p.step = k; p.stepFrac = prog; p.stepBeat = win.start + StepStartLocalBeat(k);
+        p.active = true; p.window = a; p.step = k; p.stepFrac = prog; p.stepBeat = win.start + (StepStartLocalBeat(k) - win.offset);
         p.hit = Decide(a, k, pass);
-        p.tile = p.hit.node >= 0 ? TileAt(a, p.hit.node) : null;
-        int nh = NextPatternHitStep(k, win.length);
+        p.tile = p.hit.node >= 0 ? TileOfStep(a, k, p.hit.node) : null;
+        int nh = NextPatternHitStep(k, win.length + win.offset);
         p.nextStep = nh;
         if (nh >= 0)
         {
-            p.nextBeat = win.start + StepStartLocalBeat(nh);
+            p.nextBeat = win.start + (StepStartLocalBeat(nh) - win.offset);
             p.nextHit = Decide(a, nh, pass);
             p.nextTile = p.nextHit.node >= 0 ? TileAt(a, p.nextHit.node) : null;
         }
@@ -2420,7 +2556,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         if (dropT < 1f) UpdateDrop(dt);
         else if (previewT < 1f) UpdatePreview(dt);
         else if (nodes.Count > 0 && (isFinalized || (hologram && GlobalClock.IsPlaying))) UpdatePlayback(dt);   // v4 R3: the draft plays live
-        else if (nodes.Count > 0) { noteNode = nodes.Count - 1; noteProgress = 0f; SettleOn(restingTile != null ? restingTile : nodes[nodes.Count - 1], dt); }
+        else if (nodes.Count > 0) { noteNode = nodes.Count - 1; noteProgress = 0f; var rt = restingTile != null ? restingTile : NodeTile(nodes.Count - 1); SettleOn(rt, dt, !GuestOn(rt)); }
         UpdateVisuals(dt);
         UpdateHolo(dt);
         UpdateGlass(dt);                             // v7: a layer cube's glass / phase-in
@@ -2486,7 +2622,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
             wasActive = false; lastStep = -1; lastWindow = -1; hopping = false; ratchetLeft = 0; echoLeft = 0; leanDir = Vector3.zero;
             int nW; double nStart; int nLoops;
             float from = a >= 0 ? windows[a].start + windows[a].length : song;
-            if (NextAudibleWindowFrom(from, out nW, out nStart, out nLoops)) { if (playing) TrySchedule(nW, 0, GlobalClock.DspTimeOfBeat(nStart), 0f, nLoops); }
+            if (NextAudibleWindowFrom(from, out nW, out nStart, out nLoops)) { if (playing) ScheduleFirst(nW, nStart, nLoops); }
             else nW = -1;
             asleep = playing;
             noteNode = HomeNode; noteProgress = 0f;
@@ -2497,7 +2633,8 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         asleep = false; wasActive = true;
 
         Window win = windows[a];
-        float local = song - win.start;
+        float local = song - win.start + win.offset;   // SPAN: the PATTERN beat — a through window goes on where the grids before it stopped (offset 0 elsewhere)
+        float wend = win.length + win.offset;          // ... and the window's end on that scale
         int pass = PassOf(a, 0);
         int k; float p;
         ComputeStep(local, out k, out p);
@@ -2514,19 +2651,23 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         }
         if (playing)
         {
-            if (k != lastStep || a != lastWindow) { lastStep = k; lastWindow = a; Land(a, k, cur, pass); }
+            if (k != lastStep || a != lastWindow)
+            {
+                lastStep = k; lastWindow = a;
+                if (!(hasThrough && StepStartLocalBeat(k) < win.offset - 1e-4f)) Land(a, k, cur, pass);   // SPAN: a note ringing in over the seam landed on the grid before
+            }
             ScheduleFrom(a, k, now);
-            UpdateSubHits(local, win.length);
+            UpdateSubHits(local, wend);
         }
 
         noteNode = cur.node >= 0 ? cur.node : EndNode; noteProgress = p;
         layerPhase = PhaseInWindow(a, k, local, cur, pass);
         if (TransitionOut(a, song, local, k, cur)) return;   // v7: the rewind zip, a step across a pass boundary / into the next measure of its long grid
         if (cur.node < 0) { hopping = false; SettleOn(TileAt(a, EndNode), dt); return; }
-        TileInteraction ta = TileAt(a, cur.node);
+        TileInteraction ta = TileOfStep(a, k, cur.node);   // (SPAN: a note that rang in over the seam keeps the cube on the grid it was struck on)
         if (ta == null) return;
-        int nh = NextPatternHitStep(k, win.length);
-        bool stepEndsWindow = StepStartLocalBeat(k + 1) >= win.length - 1e-4f;
+        int nh = NextPatternHitStep(k, wend);
+        bool stepEndsWindow = StepStartLocalBeat(k + 1) >= wend - 1e-4f;
         Hit nb = nh >= 0 ? Decide(a, nh, pass) : new Hit { node = -1 };
         // v4 R1: a durations note sits, then hops in at most HopMaxBeats (the hop starts at max(snap * len, len - HopMaxBeats))
         float hs = ProjectConfig.snapThreshold, arcScale = StepBeats <= 0.25f ? 0.6f : 1f;
@@ -2538,11 +2679,11 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         }
         if (sphere && nb.node >= 0) hs = SphereHopStart(hs, ta, TileAt(a, nb.node), HasDurations ? StepLenBeats(k) : 0f);   // a far leap takes longer in the air
         bool moving = nh == k + 1 && nb.node >= 0 && nb.node != cur.node && !stepEndsWindow && p >= hs;
-        if (!moving) { hopping = false; SettleOn(ta, dt); }
+        if (!moving) { hopping = false; SettleOn(ta, dt, !GuestOn(ta)); }
         else
         {
             TileInteraction tb = TileAt(a, nb.node);
-            if (tb == null) { SettleOn(ta, dt); return; }
+            if (tb == null) { SettleOn(ta, dt, !GuestOn(ta)); return; }
             float f = (p - hs) / Mathf.Max(1e-4f, 1f - hs);
             if (win.island != null && win.island.IsStairs) StairHop(ta, tb, f);   // v7: a runner drops (climbs) step to step
             else Hop(ta, tb, f, HopArcMul(nb), arcScale);
@@ -2554,16 +2695,17 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     void ScheduleFrom(int a, int k, double now)
     {
         Window win = windows[a];
-        float kLocal = StepStartLocalBeat(k);
+        float kLocal = StepStartLocalBeat(k) - win.offset;   // SPAN: window-local (a through window's steps are counted in pattern beats)
         double dspK = GlobalClock.DspTimeOfBeat(win.start + kLocal);
-        if (dspK >= now - 0.03) TrySchedule(a, k, dspK, kLocal, 0);
+        // SPAN: a step that began before this window (a note ringing in over the seam) belongs to the window before — never struck again here
+        if (dspK >= now - 0.03 && kLocal >= -1e-4f) TrySchedule(a, k, dspK, kLocal, 0);
         for (int j = k + 1; j < k + 64; j++)
         {
-            float sl = StepStartLocalBeat(j);
+            float sl = StepStartLocalBeat(j) - win.offset;
             if (sl >= win.length - 1e-4f)
             {
                 int w; double startBeat; int loops;
-                if (NextAudibleWindowFrom(win.start + win.length, out w, out startBeat, out loops)) TrySchedule(w, 0, GlobalClock.DspTimeOfBeat(startBeat), 0f, loops);
+                if (NextAudibleWindowFrom(win.start + win.length, out w, out startBeat, out loops)) ScheduleFirst(w, startBeat, loops);
                 break;
             }
             double dsp = GlobalClock.DspTimeOfBeat(win.start + sl);
@@ -2652,7 +2794,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         bool grid = layer == 0;                  // v7: a layer cube lands in its layer: the grid's tile below stays still
         Vector3 at = TopOf(tile);
         leanDir = Vector3.zero; leanT = 0f;
-        float length = windows[w].length;
+        float length = windows[w].length + windows[w].offset;   // (SPAN: on the pattern's scale, like the step starts)
         if (!hit.hit)
         {
             squashT = 0f; squashKind = 0.35f;
@@ -2739,8 +2881,12 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         double bps = GlobalClock.BeatsPerSecond;
         double stepSec = (HasDurations ? StepLenBeats(k) : StepBeats) / bps;   // v4 R1: the note's own (swung) length; legacy: the step
         double windowEndDsp = dsp + (win.length - startLocal) / bps;      // pass-independent: derived from this step's own time
-        double nextHitDsp = NextHitDsp(w, k, pass, dsp, startLocal, win.length);
-        int n = VoiceRules.Resolve(this, win, tile, hit, stack, pass, dsp, stepSec, windowEndDsp, nextHitDsp, events);
+        // SPAN: where the pattern goes straight on onto the next grid a note may ring over the seam (a tie over the barline is just a long note):
+        // its off is capped at the end of that run of windows, and "the next hit" is looked for through it
+        float ringLen = hasThrough ? RingLength(w) : win.length;
+        double ringEndDsp = ringLen > win.length ? dsp + (ringLen - startLocal) / bps : windowEndDsp;
+        double nextHitDsp = NextHitDsp(w, k, pass, dsp, startLocal, ringLen);
+        int n = VoiceRules.Resolve(this, win, tile, hit, stack, pass, dsp, stepSec, windowEndDsp, nextHitDsp, events, ringEndDsp);
         if (n <= 0) return;
         if (Synth.Ready) { VoiceRules.Dispatch(events, n, owner); if (!Performance.StutterActive) TrackLive(events, n, now); return; }
 
@@ -2762,9 +2908,10 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     double NextHitDsp(int w, int k, int pass, double dsp, float startLocal, float length)
     {
         double bps = GlobalClock.BeatsPerSecond;
+        float off = WindowOffset(w);
         for (int j = k + 1; j < k + 256; j++)
         {
-            float sl = StepStartLocalBeat(j);
+            float sl = StepStartLocalBeat(j) - off;
             if (sl >= length - 1e-4f) return double.PositiveInfinity;
             if (Decide(w, j, pass).hit) return dsp + (sl - startLocal) / bps;
         }
@@ -2881,13 +3028,13 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         if (a >= 0 && !windows[a].silent)
         {
             int k; float p;
-            ComputeStep(song - windows[a].start, out k, out p);
+            ComputeStep(song - windows[a].start + windows[a].offset, out k, out p);
             ScheduleFrom(a, k, now);
             return;
         }
         int w; double startBeat; int loops;
         float from = a >= 0 ? windows[a].start + windows[a].length : song;
-        if (NextAudibleWindowFrom(from, out w, out startBeat, out loops)) TrySchedule(w, 0, GlobalClock.DspTimeOfBeat(startBeat), 0f, loops);
+        if (NextAudibleWindowFrom(from, out w, out startBeat, out loops)) ScheduleFirst(w, startBeat, loops);
     }
 
     // ---- notes this cube dispatched that may still be sounding or sit queued inside the lookahead: a tempo change retimes their note-offs
@@ -2997,6 +3144,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         UpdateGhosts(dt);
         UpdateDisc();
         UpdateEchoQuads(dt);
+        FollowChain();   // Flow (F1): the beads on the lane's later grids follow those grids
     }
 
     // ---- shadow ghosts: translucent copies hopping on the shadow row(s) of the current node (follow 1 above, 2 below, 3 both)
@@ -3151,6 +3299,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         }
         if (t.Count == 0) return;
         bool wasLegacy = !HasDurations;
+        HomeTiles(t);   // Flow (F1): a span cube may be handed the tiles of the later grids of its lane (their cells are kept)
         nodes = t;
         mods.Clear(); rests.Clear();
         for (int i = 0; i < m.Count; i++) { mods.Add(m[i]); rests.Add(m[i] == 1); }
@@ -3186,7 +3335,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         if (tile == null) return;
         SyncLists();
-        var t = new List<TileInteraction>(nodes); var m = new List<int>(mods); var d = DursCopy(); var b = BendCopy(); var g = NudgeCopy();
+        var t = PathTiles(); var m = new List<int>(mods); var d = DursCopy(); var b = BendCopy(); var g = NudgeCopy();
         index = Mathf.Clamp(index, 0, t.Count);
         t.Insert(index, tile); m.Insert(index, Mathf.Clamp(mod, 0, 8));
         if (d != null) d.Insert(index, ticks > 0 ? ClampTicks(ticks) : (d.Count == 0 ? 24 : d[Mathf.Clamp(index - 1, 0, d.Count - 1)]));
@@ -3200,7 +3349,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         if (index < 0 || index >= nodes.Count || nodes.Count <= 1) return false;
         SyncLists();
-        var t = new List<TileInteraction>(nodes); var m = new List<int>(mods); var d = DursCopy(); var b = BendCopy(); var g = NudgeCopy();
+        var t = PathTiles(); var m = new List<int>(mods); var d = DursCopy(); var b = BendCopy(); var g = NudgeCopy();
         t.RemoveAt(index); m.RemoveAt(index);
         if (d != null) d.RemoveAt(index);
         if (b != null) b.RemoveAt(index);
@@ -3214,7 +3363,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         if (tile == null || index < 0 || index >= nodes.Count || nodes[index] == tile) return false;
         SyncLists();
-        var t = new List<TileInteraction>(nodes); var m = new List<int>(mods); var b = BendCopy();
+        var t = PathTiles(); var m = new List<int>(mods); var b = BendCopy();
         t[index] = tile;
         if (b != null) b[index] = 0;   // v7: moved onto another tile, the note plays that tile (its bend belonged to the old one)
         SetPathAndMods(t, m, DursCopy(), b != null ? b : new List<int>(), null);   // v9: a nudge is relative — it moves with its note
@@ -3226,7 +3375,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         if (nodes.Count < 2) return;
         SyncLists();
-        var t = new List<TileInteraction>(nodes); var m = new List<int>(mods); var d = DursCopy(); var b = BendCopy(); var g = NudgeCopy();
+        var t = PathTiles(); var m = new List<int>(mods); var d = DursCopy(); var b = BendCopy(); var g = NudgeCopy();
         t.Reverse(); m.Reverse();
         if (d != null) d.Reverse();   // each length travels with its node
         if (b != null) b.Reverse();   // v7: and each bend
@@ -3274,7 +3423,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     /// <summary>After any path edit: grid offsets, legacy positions, the line and beads, pending notes and the step cursor.</summary>
     void PathEdited()
     {
-        motionVersion++;
+        motionVersion++; startSig = int.MinValue;
         SyncLists();
         pathNodes.Clear(); foreach (var n in nodes) if (n != null) pathNodes.Add(n.Top);
         lastStep = -1; lastWindow = -1; hopping = false; ratchetLeft = 0; echoLeft = 0; leanDir = Vector3.zero;
@@ -3306,14 +3455,14 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         if (ni != instrument) voice = Instruments.BrushVoiceOf(ni);   // v6: a new group, its brush sound
         instrument = ni; ApplyInstrumentLook(); CancelPending(); RefreshLine(); TileInteraction.RefreshKitLook(); OnAnyChanged?.Invoke(this);
     }
-    public void SetStep(StepLen s) { step = s; lastStep = -1; hopping = false; SoftReschedule(); RefreshLine(); OnAnyChanged?.Invoke(this); }
+    public void SetStep(StepLen s) { step = s; lastStep = -1; hopping = false; startSig = int.MinValue; SoftReschedule(); RefreshLine(); OnAnyChanged?.Invoke(this); }
     public void SetGate(Gate g) { gate = g; OnAnyChanged?.Invoke(this); }
-    public void SetMode(PathMode m) { mode = m; lastStep = -1; hopping = false; SoftReschedule(); RefreshLine(); OnAnyChanged?.Invoke(this); }
+    public void SetMode(PathMode m) { mode = m; lastStep = -1; hopping = false; startSig = int.MinValue; SoftReschedule(); RefreshLine(); OnAnyChanged?.Invoke(this); }
     public void SetVolume(float v) { volume = Mathf.Clamp01(v); OnAnyChanged?.Invoke(this); }
     public void SetMuted(bool m) { muted = m; CancelPending(); OnAnyChanged?.Invoke(this); }
 
     // v2 setters (SPEC §3.1): each clamps, drops pending notes, redraws the path and notifies. History.Push is the gesture owner's job.
-    void Changed() { motionVersion++; SoftReschedule(); RefreshLine(); OnAnyChanged?.Invoke(this); }
+    void Changed() { motionVersion++; startSig = int.MinValue; SoftReschedule(); RefreshLine(); OnAnyChanged?.Invoke(this); }
     /// <summary>Necklace hits: -1 = every step, -2 = explicit mask, 1..n Euclidean.</summary>
     public void SetHits(int k) { hits = k < -2 ? -1 : Mathf.Min(k, 24); lastStep = -1; Changed(); }
     /// <summary>Necklace rotation, wrapped into [0, StepsPerBar).</summary>
@@ -3351,6 +3500,226 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     public void SetPhase(int p) { phase = Mathf.Clamp(p, 0, 63); lastStep = -1; hopping = false; Changed(); }
     /// <summary>Rider (replays on every Route island; its windows come from SongManager); pitched cubes only.</summary>
     public void SetRider(bool r) { rider = r && !IsDrums; Changed(); SequenceMaster.RecalculateTimeline(); }   // the windows come from SongManager: recompute at once, or the toggle is inaudible until the next rebuild
+
+    // ================================================================== Flow (F1, SPEC flow §1): SPAN — one melody walking on through its lane
+    /// <summary>Flow (F1): the cube plays on through the next <paramref name="n"/> grids of its home grid's lane (0..ProjectConfig.MaxCarry; a Moon
+    /// cube never spans). The windows come from SongManager, so the timeline is recomputed at once; while the song plays only the notes not yet
+    /// due are re-decided (the sounding ones ring on). Notifies; no History (the gesture owner pushes). A chain shorter than the span plays what
+    /// exists.</summary>
+    public void SetSpan(int n)
+    {
+        n = IsOnMoon ? 0 : Mathf.Clamp(n, 0, ProjectConfig.MaxCarry);
+        if (n == span) return;
+        span = n;
+        Changed();
+        SequenceMaster.RecalculateTimeline();
+    }
+
+    bool hasThrough;
+    int[] contPrev = new int[0], contNext = new int[0];
+    readonly KeyBlock[] chainIsl = new KeyBlock[ProjectConfig.MaxCarry + 1]; readonly float[] chainOff = new float[ProjectConfig.MaxCarry + 1]; int chainLen = 1;
+    Vector3 chainPosSum;
+    /// <summary>Flow (F1): true when the cube has through windows (its span reaches at least one more grid of its lane).</summary>
+    public bool HasThrough => hasThrough;
+    /// <summary>Flow (F1): the pattern beats before window <paramref name="w"/> (a through window's offset; 0 for every other window).</summary>
+    public float WindowOffset(int w) => w >= 0 && w < windows.Count ? windows[w].offset : 0f;
+    /// <summary>Flow (F1): the start of pattern step <paramref name="k"/> in beats from window <paramref name="w"/>'s start (negative: a note that
+    /// began on the grid before and rings in). <see cref="StepStartLocalBeat"/> for a window without an offset.</summary>
+    public float StepStartIn(int w, int k) => StepStartLocalBeat(k) - WindowOffset(w);
+    /// <summary>Flow (F1): the first pattern step that STARTS inside window <paramref name="w"/> (0 for a window without an offset): loops over a
+    /// window's steps start here and stop where <see cref="StepStartIn"/> reaches the window's length.</summary>
+    public int FirstStepIn(int w)
+    {
+        float off = WindowOffset(w);
+        if (off <= 0f) return 0;
+        int k; float p;
+        ComputeStep(off, out k, out p);
+        return StepStartLocalBeat(k) < off - 1e-4f ? k + 1 : k;
+    }
+
+    /// <summary>After the windows changed: which windows go straight on into which (the pattern runs on without a gap: the next window starts where
+    /// this one ends, in song time and in pattern time) and the chain of grids the first pass of the melody walks (home first).</summary>
+    void RebuildSpan()
+    {
+        int n = windows.Count;
+        hasThrough = false; chainLen = 1; chainIsl[0] = Island; chainOff[0] = 0f;
+        for (int i = 1; i < chainIsl.Length; i++) { chainIsl[i] = null; chainOff[i] = 0f; }
+        startSig = int.MinValue;
+        for (int i = 0; i < n; i++) if (windows[i].through) { hasThrough = true; break; }
+        if (!hasThrough) return;
+        if (contPrev.Length < n) { contPrev = new int[n]; contNext = new int[n]; }
+        for (int i = 0; i < contPrev.Length; i++) { contPrev[i] = -1; contNext[i] = -1; }
+        for (int i = 0; i < n; i++)
+        {
+            var wi = windows[i];
+            if (!wi.through || wi.hop < 1 || wi.hop > span || wi.hop >= chainIsl.Length || chainIsl[wi.hop] != null) continue;
+            chainIsl[wi.hop] = wi.island; chainOff[wi.hop] = wi.offset; chainLen = Mathf.Max(chainLen, wi.hop + 1);
+        }
+        for (int b = 0; b < n; b++)
+        {
+            var wb = windows[b];
+            if (!wb.through || wb.offset <= 0f) continue;
+            for (int a = 0; a < n; a++)
+            {
+                var wa = windows[a];
+                if (a == b || Mathf.Abs(wa.start + wa.length - wb.start) > 1e-3f || Mathf.Abs(wa.offset + wa.length - wb.offset) > 1e-3f) continue;
+                contPrev[b] = a; contNext[a] = b;
+                break;
+            }
+        }
+        chainPosSum = ChainPosSum();
+    }
+
+    /// <summary>The beats from window <paramref name="w"/>'s start to the end of the run of windows the pattern goes straight on through (its own
+    /// length when nothing follows without a gap): how far a note struck in it may ring, where its next hit is looked for.</summary>
+    float RingLength(int w)
+    {
+        if (w < 0 || w >= windows.Count) return measureLength;
+        float len = windows[w].length;
+        if (!hasThrough) return len;
+        for (int g = 0, c = w; g < 8 && c < contNext.Length && contNext[c] >= 0; g++) { c = contNext[c]; len += windows[c].length; }
+        return len;
+    }
+
+    /// <summary>The pattern step that put the cube where step <paramref name="k"/> finds it: k when it is a hit, else the last hit before it (a wait
+    /// step of a necklace, the fillers after a Once pass).</summary>
+    int AnchorStep(int k)
+    {
+        if (HasDurations) { EnsureDurCache(); return dcOnce && dcP > 0 && k >= dcP ? dcP - 1 : k; }
+        for (int j = k, g = 0; j >= 0 && g < 64; j--, g++) if (PatternHit(j)) return j;
+        return k;
+    }
+
+    /// <summary>The window step <paramref name="k"/> was struck in, seen from window <paramref name="w"/>: w itself, or — a note that began before
+    /// w and rings in over the seam — the window before it in the run.</summary>
+    int StepWindow(int w, int k)
+    {
+        if (!hasThrough || w < 0 || w >= windows.Count) return w;
+        float s = StepStartLocalBeat(AnchorStep(k));
+        for (int g = 0; g < 8 && w < contPrev.Length && contPrev[w] >= 0 && s < windows[w].offset - 1e-4f; g++) w = contPrev[w];
+        return w;
+    }
+
+    /// <summary>The tile the cube stands on for step <paramref name="k"/> (node <paramref name="node"/>) while window <paramref name="w"/> plays:
+    /// <see cref="TileAt"/> in the window the step was struck in (a note ringing over a seam keeps its tile on the grid before).</summary>
+    TileInteraction TileOfStep(int w, int k, int node) => hasThrough ? TileAt(StepWindow(w, k), node) : TileAt(w, node);
+
+    /// <summary>A span cube is a guest on the later grids of its lane: it stands on their tiles without joining the stacks there (rule 3's octave
+    /// lift must never re-pitch that grid's own cubes).</summary>
+    bool GuestOn(TileInteraction t) => hasThrough && t != null && t.island != Island;
+
+    /// <summary>Schedules the first step that starts in window <paramref name="w"/> (starting at song beat <paramref name="startBeat"/>): its step 0
+    /// at the window's start, or — a through window — the first pattern step that begins inside it (later than the start when a note rings in).</summary>
+    void ScheduleFirst(int w, double startBeat, int loops)
+    {
+        if (WindowOffset(w) <= 0f) { TrySchedule(w, 0, GlobalClock.DspTimeOfBeat(startBeat), 0f, loops); return; }
+        int k0 = FirstStepIn(w);
+        float sl = StepStartIn(w, k0);
+        if (sl >= windows[w].length - 1e-4f) return;
+        TrySchedule(w, k0, GlobalClock.DspTimeOfBeat(startBeat + sl), sl, loops);
+    }
+
+    // ---- where each node starts (pattern beats, no swing) and so which grid of the chain realises it
+    float[] nodeStart = new float[0]; int startSig = int.MinValue, startFrame = -1;
+
+    int StartSignature()
+    {
+        unchecked
+        {
+            int h = 41 + nodes.Count * 7 + (int)mode * 3 + (reverse ? 1 : 0);
+            h = h * 31 + phase; h = h * 31 + (int)step; h = h * 31 + hits; h = h * 31 + rot; h = h * 31 + mask; h = h * 31 + GlobalClock.BeatsPerBar;
+            for (int i = 0; i < durs.Count; i++) h = h * 31 + durs[i];
+            return h;
+        }
+    }
+
+    void EnsureNodeStarts()
+    {
+        if (startFrame == Time.frameCount && startSig != int.MinValue && nodeStart.Length == nodes.Count) return;
+        startFrame = Time.frameCount;
+        int sig = StartSignature();
+        if (sig == startSig && nodeStart.Length == nodes.Count) return;
+        startSig = sig;
+        int n = nodes.Count;
+        if (nodeStart.Length != n) nodeStart = new float[n];
+        for (int i = 0; i < n; i++) nodeStart[i] = -1f;
+        if (HasDurations)
+        {
+            EnsureDurCache();
+            for (int r = 0; r < dcP; r++) { int nd = dcNode[r]; if (nd >= 0 && nd < n && nodeStart[nd] < 0f) nodeStart[nd] = dcStart[r] / (float)TPB; }
+            float t = 0f;   // a node the pattern never reaches (a Once pass with a phase): where the path order would put it
+            for (int i = 0; i < n; i++) { if (nodeStart[i] < 0f) nodeStart[i] = t; t += durs[i] / (float)TPB; }
+            return;
+        }
+        int left = n;
+        for (int k = 0; k < 2048 && left > 0; k++)
+        {
+            if (!PatternHit(k)) continue;
+            int nd = NodeForHit(HitIndex(k) + Mathf.Max(0, phase));
+            if (nd < 0) break;   // a Once pass is over
+            if (nd < n && nodeStart[nd] < 0f) { nodeStart[nd] = k * StepBeats; left--; }
+        }
+        for (int i = 0; i < n; i++) if (nodeStart[i] < 0f) nodeStart[i] = i * StepBeats;
+    }
+
+    /// <summary>Flow (F1): where node <paramref name="node"/>'s note starts in pattern beats — its first time in the pattern, without swing (a
+    /// durations cube: the lengths before it; a reversed / ping-pong / phased one: its first visit).</summary>
+    public float NodeStartBeat(int node)
+    {
+        if (node < 0 || node >= nodes.Count) return 0f;
+        EnsureNodeStarts();
+        return nodeStart[node];
+    }
+
+    /// <summary>Flow (F1): the grid node <paramref name="node"/> is realised on — the grid of the cube's chain (home, then the grids its span walks
+    /// on) whose window holds the note's START. The home grid for a cube without a span; the chain's last grid for a note past its end (silent:
+    /// the chain is shorter than the pattern).</summary>
+    public KeyBlock GridOfNode(int node) => !hasThrough || chainLen <= 1 ? Island : GridAtBeat(NodeStartBeat(node));
+
+    /// <summary>Flow (F1): the grid of the cube's chain that plays pattern beat <paramref name="beat"/> — where a note starting there is realised
+    /// (a draft's next note: the summed lengths so far). The home grid without through windows; the chain's last grid past its end.</summary>
+    public KeyBlock GridAtBeat(float beat)
+    {
+        var home = Island;
+        if (!hasThrough || chainLen <= 1) return home;
+        int h = 0;
+        for (int i = 1; i < chainLen; i++) if (chainIsl[i] != null && beat >= chainOff[i] - 1e-4f) h = i;
+        return h > 0 ? chainIsl[h] : home;
+    }
+
+    /// <summary>Flow (F1): the tile node <paramref name="node"/> sounds and shows on: its home tile's (x, z) on <see cref="GridOfNode"/> (clamped
+    /// like a rider's); the node's own tile for a cube without a span.</summary>
+    public TileInteraction RealTile(int node)
+    {
+        if (node < 0 || node >= nodes.Count) return null;
+        var home = nodes[node];
+        if (!hasThrough || home == null) return home;
+        var kb = GridOfNode(node);
+        if (kb == null || kb == home.island || kb.cols <= 0 || kb.rows <= 0) return home;
+        var t = kb.GetTile(Mathf.Clamp(node < gridX.Count ? gridX[node] : home.gridX, 0, kb.cols - 1), Mathf.Clamp(node < gridZ.Count ? gridZ[node] : home.gridZ, 0, kb.rows - 1));
+        return t != null ? t : home;
+    }
+
+    /// <summary>nodes[i], or the tile it is realised on for a span cube (the look: beads, sizes, the resting draft).</summary>
+    TileInteraction NodeTile(int i) => hasThrough ? RealTile(i) : nodes[i];
+
+    Vector3 ChainPosSum()
+    {
+        Vector3 s = Vector3.zero;
+        for (int i = 1; i < chainLen; i++) if (chainIsl[i] != null) s += chainIsl[i].transform.position * i;
+        return s;
+    }
+
+    /// <summary>A span cube's beads stand on other grids too: when one of them moves (a drag, a belt, a slide — its own cubes are re-placed by the
+    /// island) the line follows.</summary>
+    void FollowChain()
+    {
+        if (!hasThrough) return;
+        Vector3 s = ChainPosSum();
+        if ((s - chainPosSum).sqrMagnitude < 1e-8f) return;
+        chainPosSum = s;
+        RefreshLine();
+    }
 
     /// <summary>
     /// A twin's state (§3.1 #10): this cube's state with twinOf = id and id = 0, modified by variant
@@ -3470,7 +3839,8 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
             shimmer = shimmer, rider = rider, seed = seed, twinOf = twinOf, id = id, voice = voice,
             layer = layer, echoOf = echoOf,   // SPEC v7 §2.1
             climb = climb,
-            sphere = sphere   // SphereBody.cs
+            sphere = sphere,   // SphereBody.cs
+            span = span        // Flow (F1)
         };
         s.durs = HasDurations ? durs.ToArray() : null;   // SPEC v4 §2.1
         s.bend = bend.Count == nodes.Count && bend.Count > 0 ? bend.ToArray() : null;   // SPEC v7 §2.1
@@ -3479,6 +3849,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         for (int i = 0; i < nodes.Count; i++)
         {
             s.xs[i] = nodes[i].gridX; s.zs[i] = nodes[i].gridZ;
+            if (HasCells) { s.xs[i] = cellX[i]; s.zs[i] = cellZ[i]; }   // Flow (F1): the note's cell (outside the home grid for a taller grid down the lane)
             int m = ModOf(i);
             s.rests[i] = m == 1; s.mods[i] = m;
         }
@@ -3489,6 +3860,15 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
     {
         step = (StepLen)Mathf.Clamp(s.step, 0, 4); gate = (Gate)Mathf.Clamp(s.gate, 0, 2); mode = (PathMode)Mathf.Clamp(s.mode, 0, 2);
         volume = s.volume <= 0f && !s.muted ? 1f : Mathf.Clamp01(s.volume); muted = s.muted;
+        // Flow (F1): a span cube's saved (x, z) are its notes' CELLS — where one is not the restored home tile's (the home grid has no such tile:
+        // RestoreCube clamped it) the cells are kept beside the nodes
+        cellX.Clear(); cellZ.Clear();
+        if (s.span > 0 && s.moon < 0 && s.xs != null && s.zs != null && s.xs.Length == nodes.Count && s.zs.Length == nodes.Count)
+        {
+            bool any = false;
+            for (int i = 0; i < nodes.Count && !any; i++) any = nodes[i] != null && (s.xs[i] != nodes[i].gridX || s.zs[i] != nodes[i].gridZ);
+            if (any) for (int i = 0; i < nodes.Count; i++) { cellX.Add(Mathf.Clamp(s.xs[i], 0, 255)); cellZ.Add(Mathf.Clamp(s.zs[i], 0, 255)); }
+        }
         SyncLists();
         var m = s.ModsOrDerived();
         for (int i = 0; i < nodes.Count; i++)
@@ -3503,6 +3883,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         voice = Mathf.Clamp(s.voice, 0, Mathf.Max(0, Instruments.VoiceCount(instrument) - 1));   // SPEC v6 §2.7
         layer = IsDrums ? 0 : Mathf.Clamp(s.layer, -ProjectConfig.MaxLayer, ProjectConfig.MaxLayer); echoOf = s.echoOf;   // SPEC v7 §2.1
         climb = IsDrums ? 0 : Mathf.Clamp(s.climb, 0, Climb.MaxLevel);
+        span = IsOnMoon ? 0 : Mathf.Clamp(s.span, 0, ProjectConfig.MaxCarry);   // Flow (F1): the windows follow at the next RecomputeMeasureStarts
         SetShape(s.sphere);   // SphereBody.cs
         bend.Clear();
         if (s.bend != null && s.bend.Length == nodes.Count) for (int i = 0; i < s.bend.Length; i++) bend.Add(Mathf.Clamp(s.bend[i], -24, 24));
@@ -3511,7 +3892,7 @@ public partial class AudioCube : MonoBehaviour   // partial: the sphere piece li
         durs.Clear();   // SPEC v4 §2.1: per-node lengths only when they line up with the restored nodes
         if (s.durs != null && s.durs.Length == nodes.Count) for (int i = 0; i < s.durs.Length; i++) durs.Add(ClampTicks(s.durs[i]));
         pattern = null;
-        motionVersion++;
+        motionVersion++; startSig = int.MinValue;
         RefreshLine();
     }
 }

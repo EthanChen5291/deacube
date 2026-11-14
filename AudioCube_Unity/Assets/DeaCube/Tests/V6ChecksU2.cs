@@ -387,10 +387,13 @@ public static class V6ChecksU2
         yield return WaitFor(() => CubeInspector.State == CubeInspector.Phase.Open && InspectorCard.Shown >= 1f, 4f);
         yield return Wait(0.3f);
         int face = InspectorCard.FaceTargetCount();
+        // Flow E1 (2026-11-13): copy and paste → next grid left the face — they are icons of the ⋯ drawer (its "copies" group)
+        InspectorCard.MoreTab.Click();
+        yield return WaitFor(() => InspectorCard.DrawerShown >= 1f, 2f); yield return Wait(0.3f);
         string h1, h2;
         bool r1 = TopHit(InspectorCard.CopyButton.transform, ScreenRect((RectTransform)InspectorCard.CopyButton.transform).center, out h1);
         bool r2 = TopHit(InspectorCard.PasteNextButton.transform, ScreenRect((RectTransform)InspectorCard.PasteNextButton.transform).center, out h2);
-        Line(face <= 20 && r1 && r2 && InspectorCard.PasteNextButton.Interactable, "the card's face gains copy and paste → next grid (a real click reaches both) and stays ≤ 20 hit targets", face + " targets, copy → " + h1 + ", paste → " + h2);
+        Line(face <= 20 && r1 && r2 && InspectorCard.PasteNextButton.Interactable, "the card's ⋯ drawer holds copy and paste → next grid (a real click reaches both); the face stays ≤ 20 hit targets", face + " targets, copy → " + h1 + ", paste → " + h2);
         int p0 = pushes;
         InspectorCard.CopyButton.Click();
         yield return null;

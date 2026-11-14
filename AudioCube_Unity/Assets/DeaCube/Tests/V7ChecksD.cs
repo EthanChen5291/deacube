@@ -295,7 +295,13 @@ public static class V7ChecksD
                 case "sleep": body = Sleep(); break;
             }
             int lateS = Synth.LateEvents;
+            // Flow (2026-11-13): "size" and "cap" assert the v7 rules Flow replaces — QUIET drawing (a playing song pauses when a path starts, Space's
+            // loop goes back to paused) and CAPACITY (auto-expand, "capacity reached", the EXPAND chip, Esc drops the draft) — so they run with
+            // PathManager.Flow off, where those rules still hold (Flow's own rules: FlowChecksDraw); the other sections run in the real game (Flow on)
+            // Flow E1: "grid" asserts the inspector grid's v7 cap (refusal + the EXPAND chip), which the card now replaces by Flow's room (FlowChecksCard c / d) — Flow off too
+            PathManager.Flow = !(s == "size" || s == "cap" || s == "grid");
             if (body != null) yield return Guard(body);
+            PathManager.Flow = true;
             if (Synth.LateEvents != lateS) Info("section " + s + ": synth late +" + (Synth.LateEvents - lateS) + " (last: " + Synth.LastLate + ")");
             var pm = PathManager.I;
             PathManager.SimShift = false;
@@ -1037,12 +1043,12 @@ public static class V7ChecksD
         if (shots) { yield return Wait(0.25f); yield return Capture("d7_marquee"); }
         pm.SimPointer(b, false, false, true, false, false, false, true);
         yield return null;
-        Rect rect = pm.MarqueeRect;
+        Rect rect = pm.MarqueeGround;   // 2026-11-13: the marquee is a rectangle on the ground (Marquee3D), not a screen rectangle
         var got = new List<KeyBlock>(GridSelection.Selected);
-        var expect = ExpectedIn(rect);
+        var expect = ExpectedOnGround(rect);
         bool same = SameSet(got, expect) && SameSet(live, expect) && got.Contains(A) && got.Contains(B);
         Add(L(armed && drawing && same && PathManager.MarqueeCount == mc0 + 1 && pm.currentState == PathManager.EditorState.Idle && !pm.Marqueeing,
-              "M1 Shift + drag draws the marquee (the camera state is Selecting all along: no pan) and selects — live and on release — exactly the grids whose platforms the screen rect touches (checked against an independent projection)",
+              "M1 Shift + drag draws the marquee (the camera state is Selecting all along: no pan) and selects — live and on release — exactly the grids whose footprints the ground rectangle overlaps (checked against an independent sampling of each platform)",
               "armed " + armed + ", drawing " + drawing + ", rect " + rect + ", selected " + Names(got) + " (live " + Names(live) + "), expected " + Names(expect) + ", state after " + pm.currentState));
         // Shift + click toggles a grid; Esc clears; a plain click on the sea clears
         var C = sm.AnchorOf(Mathf.Min(3, sm.ColumnCount - 1));
@@ -1074,8 +1080,9 @@ public static class V7ChecksD
             yield return Frames(2);
             Vector3 mc = Scr(moon.VisualCenter); Vector3 edge = Scr(moon.VisualCenter + new Vector3(ProjectConfig.MoonRadius * 0.8f, 0f, 0f));
             float rpx = Mathf.Abs(edge.x - mc.x);
-            var covering = pm.GridsInRect(new Rect(mc.x - 20f, mc.y - 20f, 40f, 40f));
-            var rim = pm.GridsInRect(new Rect(mc.x + rpx * 0.5f, mc.y - 10f, rpx, 20f));
+            Vector3 mw = moon.VisualCenter; float rw = ProjectConfig.MoonRadius * 0.8f;
+            var covering = pm.GridsOnGround(new Rect(mw.x - 0.6f, mw.z - 0.6f, 1.2f, 1.2f));
+            var rim = pm.GridsOnGround(new Rect(mw.x + rw * 0.5f, mw.z - 0.3f, rw, 0.6f));
             Add(L(covering.Contains(moon) && !rim.Contains(moon), "M3 a Moon joins a marquee only when the rectangle covers its centre", "centre rect: " + covering.Contains(moon) + ", rim rect: " + rim.Contains(moon)));
         }
         else Info("M3 skipped: no Moon (AddMoon " + mi + ")");
@@ -1109,6 +1116,27 @@ public static class V7ChecksD
 
     /// <summary>The independent check: a grid is in when its platform's top face (or the face raised to its highest tile) projects to a quad whose
     /// screen AABB meets the rect AND some point of the quad lies in the rect or some rect corner lies in the quad (sampled edges).</summary>
+    /// <summary>The grids a ground rectangle should select, found independently: a platform sampled 21 x 21 in world X / Z, a sample inside = touching.</summary>
+    static List<KeyBlock> ExpectedOnGround(Rect r)
+    {
+        var sm = SongManager.I; var list = new List<KeyBlock>();
+        foreach (var kb in sm.Islands)
+        {
+            if (kb == null || kb.IsMoon || !kb.enabled) continue;
+            var tr = kb.transform;
+            Vector3 c = tr.InverseTransformPoint(kb.VisualCenter);
+            float hw = kb.Width * 0.5f, hd = kb.Depth * 0.5f; bool hit = false;
+            for (int i = 0; i <= 20 && !hit; i++)
+                for (int j = 0; j <= 20 && !hit; j++)
+                {
+                    Vector3 w = tr.TransformPoint(new Vector3(c.x - hw + 2f * hw * i / 20f, 0f, c.z - hd + 2f * hd * j / 20f));
+                    if (r.Contains(new Vector2(w.x, w.z))) hit = true;
+                }
+            if (hit) list.Add(kb);
+        }
+        return list;
+    }
+
     static List<KeyBlock> ExpectedIn(Rect r)
     {
         var sm = SongManager.I; var list = new List<KeyBlock>();

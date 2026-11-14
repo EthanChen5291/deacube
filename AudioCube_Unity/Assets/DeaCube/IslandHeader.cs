@@ -42,6 +42,16 @@ using UnityEngine.UI;
 /// ribbon carries a sticker on each end — "+ octave below" on its low (left) end, "+ octave above" on its high (right) end, a little piano with
 /// an arrow growing out of that side (SongManager.SetKeyRange: one History entry, the notes keep their pitch) — and a "fit to the melody" tab
 /// while its notes use fewer octaves than it has (whole octaves from its lowest key, at least one).
+/// Flow E2 — A QUIET WORLD (the owner: "way too complicate again … information is too condensed … BE SIMPLE AND MINIMALISTIC"): the ribbon AT REST
+/// is FIVE things on a short band (268) — MOVE (the grip), MUTE (the speaker), REPEAT, COPY (a new column after it) and ⋯. A staircase shows its
+/// DIRECTION in repeat's place (its main job), a Moon move, dice, ⋯. Repeat's −, rewind and vary show only from ×2 and only while the pointer is
+/// on the repeat control (<see cref="RepeatHot"/>). Everything else MOVED into the ⋯ card (nothing left the game — every handler, key and saved
+/// field stays): one calm, evenly spaced grid (<see cref="LayoutMore"/>) — octave ▼ ▲, extend (+ fill the section), launch, lead, copy below,
+/// copy / paste paths, paste here; a keyboard's + octave below / above and fit; a staircase's kind, steps, speed, lead-in and repeat; a melody
+/// roll's lengths, double, cells — then a chord grid's own settings with the words they always had (chord, mood, drum fill, climb, energy,
+/// length) and the trash can (<see cref="PaintTrash"/>: the one delete drawing of the HUD). The + ghosts stay above / below (an empty layer);
+/// the + on the left / right edges (a copy: what "copy" says) are no longer drawn. With a cube or a copied pattern in the hand the ribbon and
+/// the ghosts stay hidden — hovered, pinned or selected — and return with an empty hand (they ate clicks meant for tiles).
 /// </summary>
 public class IslandHeader : MonoBehaviour
 {
@@ -97,12 +107,12 @@ public class IslandHeader : MonoBehaviour
     public HudButton Launch => launchBtn;
     public bool StyleShown => styleBtn != null && styleBtn.gameObject.activeInHierarchy;
     public bool VaryShown => varyBtn != null && varyBtn.gameObject.activeInHierarchy;
-    public bool FillShown => fillSecBtn != null && fillSecBtn.gameObject.activeInHierarchy;
-    public bool FlowShown => carryBtn != null && carryBtn.gameObject.activeInHierarchy;
-    public bool LaunchShown => launchBtn != null && launchBtn.gameObject.activeInHierarchy;
+    public bool FillShown => fillSecBtn != null && fillSecBtn.gameObject.activeSelf;
+    public bool FlowShown => carryBtn != null && carryBtn.gameObject.activeSelf;
+    public bool LaunchShown => launchBtn != null && launchBtn.gameObject.activeSelf;
     /// <summary>v9 (L) the stage lights: the LEAD spotlight button (chord grids: SetLead) and whether it shows.</summary>
     public HudButton LeadSpot => spotBtn;
-    public bool LeadSpotShown => spotBtn != null && spotBtn.gameObject.activeInHierarchy;
+    public bool LeadSpotShown => spotBtn != null && spotBtn.gameObject.activeSelf;
     public const string LeadCaptionOff = "lead · spotlight this grid's melody", LeadCaptionOn = "lead · this grid is the melody";
     /// <summary>§21: carry and flow are ONE control now — EXTEND → (the long grid); Flow / FlowSticker / FlowShown are kept as its aliases.</summary>
     public HudButton Extend => carryBtn;
@@ -133,10 +143,10 @@ public class IslandHeader : MonoBehaviour
     public HudButton KeysBelow => keysBelowBtn;
     public HudButton KeysAbove => keysAboveBtn;
     public HudButton KeysFit => keysFitBtn;
-    public bool KeysFitShown => keysFitBtn != null && keysFitBtn.gameObject.activeInHierarchy;
+    public bool KeysFitShown => keysFitBtn != null && keysFitBtn.gameObject.activeSelf;
     /// <summary>v7: the duplicate buttons a stairs / phrase shows in its more card.</summary>
-    public HudButton MoreDuplicateRight => moreDupRight;
-    public HudButton MoreDuplicateBelow => moreDupBelow;
+    public HudButton MoreDuplicateRight => dupRightBtn;
+    public HudButton MoreDuplicateBelow => dupBelowBtn;
     /// <summary>v7: the kind the band is laid out for (0 chord, 1 Moon, 2 keyboard, 3 stairs, 4 phrase; -1 none).</summary>
     public int KindShown => shownKind;
     /// <summary>v7: the names of the band's controls on screen now, left to right (tests: the item set per kind).</summary>
@@ -298,11 +308,10 @@ public class IslandHeader : MonoBehaviour
         addBelowBtn = HudKit.Control(ghostBelow, "add below", () => AddIsland(false));
         ghostBelow.GetComponent<InkHover>().hoverScale = 1f;
         plusAbove = Plus("PlusAbove"); plusBelow = Plus("PlusBelow");
-        // the user: "add to its left and right too … add to left and right just basically translates to copy": a + on each side edge
+        // Flow E2 (a quiet world): the + on each side edge said the same as "copy" — they are built (their handlers stay) but never drawn
         plusLeft = EdgePlus("PlusLeft", "add left · a copy before it", () => Duplicate(3), out addLeftBtn);
         plusRight = EdgePlus("PlusRight", "add right · a copy after it", () => Duplicate(0), out addRightBtn);
-        islandOnly.Add(plusLeft.gameObject); islandOnly.Add(plusRight.gameObject); chordOnly.Add(plusLeft.gameObject); chordOnly.Add(plusRight.gameObject);
-        islandOnly.Add(ghostAbove.gameObject); islandOnly.Add(ghostBelow.gameObject); islandOnly.Add(plusAbove.gameObject); islandOnly.Add(plusBelow.gameObject);
+        plusLeft.gameObject.SetActive(false); plusRight.gameObject.SetActive(false);
 
         // the ribbon: two notched tails in the chord colour behind a paper band
         ribbon = HudKit.Node(root, "Ribbon", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(BandW + 8f, 60f));
@@ -314,59 +323,55 @@ public class IslandHeader : MonoBehaviour
         bandShape = band.gameObject.AddComponent<InkShape>();
         bandShape.Shape = InkShape.Kind.RoundRect; bandShape.color = Comic.Cream; bandShape.Radius = 7f; bandShape.Wobble = 1.1f; bandShape.RotJitter = 0.6f;
         bandShape.SetInk(2f, 3.2f); bandShape.ShadowOffset = new Vector2(3f, -4f); bandShape.raycastTarget = true;   // the band itself eats clicks (no world pick through it)
+        // the ⋯ card (built first: the controls that left the ribbon are built into it; LayoutMore places them)
+        more = HudKit.Node(ribbon, "MoreCard", new Vector2(0.5f, 0.5f), new Vector2(0f, -119f), new Vector2(CardCols * CellW + 2f * CardPad, 176f));
+        moreShape = more.gameObject.AddComponent<InkShape>();
+        moreShape.Shape = InkShape.Kind.RoundRect; moreShape.color = Comic.Cream; moreShape.Radius = 12f; moreShape.Wobble = 1.3f; moreShape.RotJitter = 1.2f;
+        moreShape.SetInk(2f, 3.4f); moreShape.ShadowOffset = new Vector2(4f, -5f); moreShape.raycastTarget = true;
+        moreGroup = more.gameObject.AddComponent<CanvasGroup>();
 
+        // Flow E2: the ribbon at rest is FIVE things — move, mute, repeat, copy, ⋯ (a staircase: its direction instead of repeat; a Moon: move, dice, ⋯)
         // grip (v5: the island moves anywhere — the 4-way cursor)
-        var gp = Item("Grip", new Vector2(-166f, 0f), new Vector2(32f, 36f), PaintGrip, "move anywhere", null);
-        gripBtn = gp;
-        gp.gameObject.AddComponent<IslandHeaderGrip>().header = this;
-        // eye
-        eyeBtn = Item("Eye", new Vector2(-128f, 0f), new Vector2(36f, 34f), PaintEye, "turn off", ToggleSleep);
+        gripBtn = Item("Grip", new Vector2(-104f, 0f), new Vector2(36f, 38f), PaintGrip, "move anywhere", null);
+        gripBtn.gameObject.AddComponent<IslandHeaderGrip>().header = this;
+        // mute (the speaker)
+        eyeBtn = Item("Eye", new Vector2(-52f, 0f), new Vector2(40f, 36f), PaintEye, "turn off", ToggleSleep);
         eyeArt = eyeBtn.GetComponent<InkPainter>();
-        islandOnly.Add(eyeBtn.gameObject);
-        // register: ▼ ladder ▲
-        regNode = HudKit.Node(band, "Register", new Vector2(0.5f, 0.5f), new Vector2(-74f, 0f), new Vector2(76f, 38f));
-        regDownBtn = Item("RegDown", new Vector2(-96f, 0f), new Vector2(28f, 34f), p => PaintTri(p, false), "lower", () => Register(-1));
+        // register: ▼ note ▲ — one cell of the ⋯ card, two columns wide
+        regNode = HudKit.Node(more, "Register", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(84f, 38f));
+        regDownBtn = Item("RegDown", new Vector2(-25f, 0f), new Vector2(28f, 34f), p => PaintTri(p, false), "lower", () => Register(-1), regNode);
         regDownArt = regDownBtn.GetComponent<InkPainter>();
-        var lad = HudKit.Node(band, "Ladder", new Vector2(0.5f, 0.5f), new Vector2(-74f, 0f), new Vector2(18f, 38f));
+        var lad = HudKit.Node(regNode, "Ladder", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(18f, 38f));
         ladderArt = lad.gameObject.AddComponent<InkPainter>(); ladderArt.raycastTarget = false; ladderArt.onPaint = PaintLadder;
-        regUpBtn = Item("RegUp", new Vector2(-52f, 0f), new Vector2(28f, 34f), p => PaintTri(p, true), "higher", () => Register(1));
+        regUpBtn = Item("RegUp", new Vector2(25f, 0f), new Vector2(28f, 34f), p => PaintTri(p, true), "higher", () => Register(1), regNode);
         regUpArt = regUpBtn.GetComponent<InkPainter>();
-        islandOnly.Add(regDownBtn.gameObject); islandOnly.Add(lad.gameObject); islandOnly.Add(regUpBtn.gameObject); islandOnly.Add(regNode.gameObject);
-        // v5 repeat: a conveyor belt carrying the island (its passes as slots); the ×n sticker (Bangers, hero punctuation) from ×2 on
-        repeatBtn = Item("Repeat", new Vector2(-14f, 0f), new Vector2(40f, 36f), PaintRepeat, "repeat", CycleRepeat);
+        // v5 repeat: the loop arrows; the ×n tag from ×2 on (its −, rewind and vary only while the pointer is on it)
+        repeatBtn = Item("Repeat", new Vector2(0f, 0f), new Vector2(40f, 36f), PaintRepeat, "repeat", CycleRepeat);
         repeatArt = repeatBtn.GetComponent<InkPainter>();
         BuildRepeatSticker();
-        islandOnly.Add(repeatBtn.gameObject);
-        // v6 carry: a wand throwing an arc onto the next island; the ×n sticker from ×1 on
-        // §21: EXTEND → (the v6 carry wand and the v7 flow waves are one control now: the long grid)
-        carryBtn = Item("Extend", new Vector2(-22f, 0f), new Vector2(48f, 36f), PaintExtend, "extend →", CycleExtend);
+        // §21: EXTEND → (the long grid) — in the ⋯ card
+        carryBtn = Item("Extend", Vector2.zero, new Vector2(48f, 36f), PaintExtend, "extend →", CycleExtend, more);
         carryArt = carryBtn.GetComponent<InkPainter>();
         carrySticker = BuildTimesSticker(carryBtn.transform, "×1", out carryText);
         carryMinus = BuildMinus(carryBtn.transform, "un-extend · split off the last grid", StepDownExtend);
-        islandOnly.Add(carryBtn.gameObject);
-        // duplicates
-        dupNode = HudKit.Node(band, "Duplicate", new Vector2(0.5f, 0.5f), new Vector2(92f, 0f), new Vector2(80f, 38f));
-        dupRightBtn = Item("DupRight", new Vector2(72f, 0f), new Vector2(38f, 36f), p => PaintDup(p, true), "copy right", () => Duplicate(0));
-        dupBelowBtn = Item("DupBelow", new Vector2(112f, 0f), new Vector2(38f, 36f), p => PaintDup(p, false), "copy below", () => Duplicate(1));
-        islandOnly.Add(dupRightBtn.gameObject); islandOnly.Add(dupBelowBtn.gameObject); islandOnly.Add(dupNode.gameObject);
+        // copy (a new column after it) on the ribbon; copy below in the ⋯ card
+        dupRightBtn = Item("DupRight", new Vector2(52f, 0f), new Vector2(38f, 36f), p => PaintDup(p, true), "copy right", () => Duplicate(0));
+        dupBelowBtn = Item("DupBelow", Vector2.zero, new Vector2(38f, 36f), p => PaintDup(p, false), "copy below", () => Duplicate(1), more);
         // Moon: dice (re-groove)
-        diceBtn = Item("Dice", new Vector2(-60f, 0f), new Vector2(32f, 32f), PaintDice, "new groove", () => { var t = ResolveTarget(); if (t != null && t.IsMoon && UIManager.I != null) UIManager.I.RollMoon(SongManager.I.Moons.IndexOf(t)); });
-        moonOnly.Add(diceBtn.gameObject);
+        diceBtn = Item("Dice", new Vector2(0f, 0f), new Vector2(32f, 32f), PaintDice, "new groove", () => { var t = ResolveTarget(); if (t != null && t.IsMoon && UIManager.I != null) UIManager.I.RollMoon(SongManager.I.Moons.IndexOf(t)); });
         // more ⋯
-        moreBtn = Item("More", new Vector2(162f, 0f), new Vector2(34f, 34f), PaintDots, "more", () => SetMore(!moreOpen));
+        moreBtn = Item("More", new Vector2(104f, 0f), new Vector2(38f, 36f), PaintDots, "more", () => SetMore(!moreOpen));
         BuildMore();
         BuildPaste();
-        // v6: what a keyboard island does not show (no + ghosts: its column takes islands through the deck)
-        chordOnly.Add(ghostAbove.gameObject); chordOnly.Add(ghostBelow.gameObject); chordOnly.Add(plusAbove.gameObject); chordOnly.Add(plusBelow.gameObject);
-        BuildV7();   // (after the lists above: its per-kind masks read them)
+        BuildV7();   // (last: the per-kind masks and the card's flow read everything above)
 
         Hints.Register("island.header", band);
         Hints.Register("island.move", gripBtn.transform as RectTransform);
         Hints.Register("island.repeat", repeatBtn.transform as RectTransform);
         Hints.Register("island.carry", carryBtn.transform as RectTransform);
         Hints.Register("island.toggle", eyeBtn.transform as RectTransform);
-        Hints.Register("island.octave", regNode);
-        Hints.Register("island.dup", dupNode);
+        Hints.Register("island.octave", moreBtn.transform as RectTransform);   // the ⋯ until its card is open, then ▼ ▲ (SetMore)
+        Hints.Register("island.dup", dupRightBtn.transform as RectTransform);
         Hints.Register("island.addAbove", plusAbove);
         Hints.Register("island.addBelow", plusBelow);
         root.gameObject.SetActive(true);
@@ -404,9 +409,9 @@ public class IslandHeader : MonoBehaviour
         return rt;
     }
 
-    HudButton Item(string name, Vector2 pos, Vector2 size, System.Action<InkPainter> paint, string caption, System.Action onClick)
+    HudButton Item(string name, Vector2 pos, Vector2 size, System.Action<InkPainter> paint, string caption, System.Action onClick, Transform parent = null)
     {
-        var rt = HudKit.Node(band, name, new Vector2(0.5f, 0.5f), pos, size);
+        var rt = HudKit.Node(parent != null ? parent : band, name, new Vector2(0.5f, 0.5f), pos, size);
         var art = rt.gameObject.AddComponent<InkPainter>();
         art.onPaint = paint;
         var b = HudKit.Control(art, caption, onClick, null, null, art);
@@ -414,34 +419,34 @@ public class IslandHeader : MonoBehaviour
         return b;
     }
 
+    /// <summary>The ⋯ card's worded part — a chord grid's own settings, each with its short word underneath: chord, mood, drum fill, climb, energy ·
+    /// length · delete (the trash can, on every kind's card). <see cref="LayoutMore"/> places them.</summary>
     void BuildMore()
     {
-        more = HudKit.Node(ribbon, "MoreCard", new Vector2(0.5f, 0.5f), new Vector2(MoreX, -119f), new Vector2(264f, 176f));
-        moreShape = more.gameObject.AddComponent<InkShape>();
-        moreShape.Shape = InkShape.Kind.RoundRect; moreShape.color = Comic.Cream; moreShape.Radius = 12f; moreShape.Wobble = 1.3f; moreShape.RotJitter = 1.2f;
-        moreShape.SetInk(2f, 3.4f); moreShape.ShadowOffset = new Vector2(4f, -5f); moreShape.raycastTarget = true;
-        moreGroup = more.gameObject.AddComponent<CanvasGroup>();
-        // row 1: chord, mood, fill
-        chordDisc = MoreDisc("Chord", new Vector2(-90f, 52f), Comic.Ink, out chordBtn, "chord", () => { int i = TargetIsland(); if (i >= 0 && UIManager.I != null) { UIManager.I.OpenChordWheel(i); SetMore(false); } });
+        chordDisc = MoreDisc("Chord", Vector2.zero, Comic.Ink, out chordBtn, "chord", () => { int i = TargetIsland(); if (i >= 0 && UIManager.I != null) { UIManager.I.OpenChordWheel(i); SetMore(false); } });
         // the chord picker: the standard piano keys (🎹) on the chord's colour
         var keysArt = HudKit.Node(chordBtn.transform, "Keys", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f)).gameObject.AddComponent<InkPainter>();
         keysArt.raycastTarget = false; keysArt.onPaint = PaintPianoKeys;
         Hints.Register("chord", chordBtn.transform as RectTransform);
-        var md = MoreDisc("Mood", new Vector2(-30f, 52f), Comic.Cream, out moodBtn, "weather", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetMood(i, (t.mood + 1) % 4); });
+        MoreDisc("Mood", Vector2.zero, Comic.Cream, out moodBtn, "weather", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetMood(i, (t.mood + 1) % 4); });
         moodGlyph = Comic.GlyphImage(moodBtn.transform, "Glyph", "ringThin", Comic.Ink, 22f, false);
-        fillDisc = MoreDisc("Fill", new Vector2(30f, 52f), Comic.Cream, out fillBtn, "fill", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetFill(i, !t.fill); });
+        fillDisc = MoreDisc("Fill", Vector2.zero, Comic.Cream, out fillBtn, "fill", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetFill(i, !t.fill); });
         // the drum fill: the standard drum and sticks (🥁)
         var drumArt = HudKit.Node(fillBtn.transform, "Drum", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f)).gameObject.AddComponent<InkPainter>();
         drumArt.raycastTarget = false; drumArt.onPaint = PaintDrum;
         // climb (DeaCube/Climb.cs): the grid's high notes reach higher (every path on it) — off → ×1 → ×2 → ×3 → off; the pips show the level
-        MoreDisc("Climb", new Vector2(90f, 52f), Comic.Cream, out climbBtn, Climb.Caption(0), CycleClimb);
+        MoreDisc("Climb", Vector2.zero, Comic.Cream, out climbBtn, Climb.Caption(0), CycleClimb);
         climbArt = HudKit.Node(climbBtn.transform, "Art", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f)).gameObject.AddComponent<InkPainter>();
         climbArt.raycastTarget = false; climbArt.onPaint = PaintClimb;
-        // row 2: length — 1..4 bar blocks
+        // energy
+        var ert = HudKit.Node(more, "Energy", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f));
+        energyArt = ert.gameObject.AddComponent<InkPainter>(); energyArt.onPaint = PaintEnergy;
+        energyBtn = HudKit.Control(energyArt, "energy", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetEnergy(i, (t.energy + 1) % 4); }, null, null, energyArt);
+        // length — 1..4 measure blocks
         for (int k = 1; k <= 4; k++)
         {
             int bars = k;
-            var rt = HudKit.Node(more, "Bars" + k, new Vector2(0.5f, 0.5f), new Vector2(-90f + (k - 1) * 30f, -2f), new Vector2(28f, 28f));
+            var rt = HudKit.Node(more, "Bars" + k, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(28f, 28f));
             var art = rt.gameObject.AddComponent<InkPainter>();
             art.onPaint = p => PaintBarBlock(p, bars);
             var num = HudKit.Words(rt, "N", bars.ToString(), 16f, Comic.Ink, TMPro.TextAlignmentOptions.Center);   // the measures, as a digit
@@ -450,46 +455,35 @@ public class IslandHeader : MonoBehaviour
             barArts.Add(art);
             barBtns[k - 1] = HudKit.Control(art, "length", () => { int i = TargetIsland(); if (i >= 0) SongManager.I.SetBars(i, bars); }, null, null, art);
         }
-        // row 3: energy — and delete (a trash can apart at the right); v9: the fall style went with the plunge presentation (hidden)
-        var ert = HudKit.Node(more, "Energy", new Vector2(0.5f, 0.5f), new Vector2(-90f, -46f), new Vector2(40f, 40f));
-        energyArt = ert.gameObject.AddComponent<InkPainter>(); energyArt.onPaint = PaintEnergy;
-        energyBtn = HudKit.Control(energyArt, "energy", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetEnergy(i, (t.energy + 1) % 4); }, null, null, energyArt);
-        MoreDisc("Fall", new Vector2(-30f, -46f), Comic.Cream, out fallBtn, "fall style", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetFall(i, (Mathf.Clamp(t.fall, 0, 5) + 1) % 6); });
+        // v9: the fall style went with the plunge presentation (never shown; the field stays in saves)
+        MoreDisc("Fall", Vector2.zero, Comic.Cream, out fallBtn, "fall style", () => { int i = TargetIsland(); var t = ResolveTarget(); if (i >= 0 && t != null) SongManager.I.SetFall(i, (Mathf.Clamp(t.fall, 0, 5) + 1) % 6); });
         fallGlyph = Comic.GlyphImage(fallBtn.transform, "Glyph", BounceGlyphs.Icons[0], Comic.Ink, 22f, false);
-        fallBtn.gameObject.SetActive(false);   // v9: the plunge presentation (its fall styles) is gone, so the button is never shown (the field stays in saves)
-        var drt = HudKit.Node(more, "Remove", new Vector2(0.5f, 0.5f), new Vector2(98f, -46f), new Vector2(40f, 38f));
+        fallBtn.gameObject.SetActive(false);
+        // delete: the trash can (apart, bottom right) — on every kind's card
+        var drt = HudKit.Node(more, "Remove", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 38f));
         deleteRt = drt;
         var dart = drt.gameObject.AddComponent<InkPainter>(); dart.onPaint = PaintTearOff;
         deleteBtn = HudKit.Control(dart, "delete", DeleteTarget, null, null, dart);
         var dl = HudKit.Words(drt, "Label_delete", "delete", 13f, Comic.A(Comic.Ink, 0.85f), TMPro.TextAlignmentOptions.Center);   // rides with the button on every card
-        dl.rectTransform.sizeDelta = new Vector2(70f, 18f); dl.rectTransform.anchoredPosition = new Vector2(0f, -29f);
-        // (the Moon's more card: only delete)
-        foreach (var b in new[] { chordBtn, moodBtn, fillBtn, energyBtn, climbBtn }) { islandOnly.Add(b.gameObject); chordOnly.Add(b.gameObject); }
-        foreach (var b in barBtns) { islandOnly.Add(b.gameObject); chordOnly.Add(b.gameObject); }
-        // a word under every button (the pictures alone did not say what they do)
-        foreach (var l in new[] { MoreLabel("chord", -90f, 24f), MoreLabel("mood", -30f, 24f), MoreLabel("drum fill", 30f, 24f), MoreLabel("climb", 90f, 24f),
-                                  MoreLabel("length", 0f, -2f, 24f), MoreLabel("energy", -90f, -75f) })
-        { islandOnly.Add(l); chordOnly.Add(l); }
+        dl.rectTransform.sizeDelta = new Vector2(70f, 18f); dl.rectTransform.anchoredPosition = new Vector2(0f, -LabelDrop);
+        // a word under every one of them (the pictures alone did not say what they do)
+        lblChord = MoreLabel("chord"); lblMood = MoreLabel("mood"); lblFill = MoreLabel("drum fill"); lblClimb = MoreLabel("climb"); lblEnergy = MoreLabel("energy"); lblLength = MoreLabel("length");
         more.gameObject.SetActive(false);
     }
 
-    /// <summary>v6: the "paste here" tab — a cream sticker standing on the ribbon's right side: the copied pattern as a little card dropping
-    /// onto an island.</summary>
+    /// <summary>v6 / v7, Flow E2: the clipboard's controls, in the ⋯ card — "paste here" (the copied pattern as a little card: shown while the
+    /// clipboard's pattern fits this island), "copy all paths" (this grid has paths) and "paste the copied paths here" (×n: they fit here).</summary>
     void BuildPaste()
     {
-        var rt = HudKit.Node(ribbon, "PasteHere", new Vector2(0.5f, 0.5f), new Vector2(BandW * 0.5f - 64f, 47f), new Vector2(48f, 40f));
-        var body = rt.gameObject.AddComponent<InkShape>();
-        body.Shape = InkShape.Kind.Sticker; body.color = Comic.Cream; body.SetInk(1.8f, 2.8f); body.ShadowOffset = new Vector2(3f, -3.5f); body.RotJitter = 2f;
-        var content = HudKit.Node(rt, "Art", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(48f, 40f));
-        pasteArt = content.gameObject.AddComponent<InkPainter>(); pasteArt.raycastTarget = false; pasteArt.onPaint = PaintPaste;
-        pasteBtn = HudKit.Control(body, "paste here", PasteHere, body, content, pasteArt);
-        pasteBtn.GetComponent<InkHover>().hoverScale = 1.12f;
-        rt.localEulerAngles = new Vector3(0f, 0f, -5f);
-        Hints.Register("island.paste", rt);
-        rt.gameObject.SetActive(false);
+        pasteBtn = Item("PasteHere", Vector2.zero, new Vector2(40f, 40f), PaintPaste, "paste here", PasteHere, more);
+        pasteArt = pasteBtn.GetComponent<InkPainter>();
+        Hints.Register("island.paste", pasteBtn.transform as RectTransform);
+        pasteBtn.gameObject.SetActive(false);
         // v7: every path of this grid copied at once (Clipboard.CopyPaths) and pasted onto another grid, each fitted to its chord
-        copyPathsBtn = TopSticker("CopyPaths", new Vector2(74f, 47f), PaintCopyPaths, "copy all paths", CopyPathsHere, out copyPathsArt, new Vector2(42f, 32f));
-        pastePathsBtn = TopSticker("PastePaths", new Vector2(126f, 47f), PaintPastePaths, "paste the copied paths here", PastePathsHere, out pastePathsArt, new Vector2(46f, 34f));
+        copyPathsBtn = Item("CopyPaths", Vector2.zero, new Vector2(42f, 36f), PaintCopyPaths, "copy all paths", CopyPathsHere, more);
+        copyPathsArt = copyPathsBtn.GetComponent<InkPainter>();
+        pastePathsBtn = Item("PastePaths", Vector2.zero, new Vector2(42f, 38f), PaintPastePaths, "paste the copied paths here", PastePathsHere, more);
+        pastePathsArt = pastePathsBtn.GetComponent<InkPainter>();
         pastePathsBadge = BuildTimesSticker(pastePathsBtn.transform, "×1", out pastePathsText);   // the ×n badge on its corner (as repeat's / extend's)
         Hints.Register("island.copyPaths", copyPathsBtn.transform as RectTransform);
         Hints.Register("island.pastePaths", pastePathsBtn.transform as RectTransform);
@@ -558,41 +552,43 @@ public class IslandHeader : MonoBehaviour
     /// rate, lead-in), the phrase band (lengths, double, cells), the more card's duplicates for stairs / phrases, and the per-kind masks.</summary>
     void BuildV7()
     {
-        // every grid: launch (↗ — §21: a build-up into the next section, the riser and its crash; nothing moves)
-        launchBtn = Item("Launch", new Vector2(32f, 0f), new Vector2(38f, 36f), PaintLaunch, LaunchCaptionOff, ToggleLaunch);
+        // every playing grid: launch (↗ — §21: a build-up into the next section, the riser and its crash; nothing moves) — in the ⋯ card
+        launchBtn = Item("Launch", Vector2.zero, new Vector2(38f, 36f), PaintLaunch, LaunchCaptionOff, ToggleLaunch, more);
         launchArt = launchBtn.GetComponent<InkPainter>();
-        // v9 (L) chord grids: LEAD (the stage lights' spotlight comes down on it while it sounds), between copy below and more
-        spotBtn = Item("LeadSpot", new Vector2(172f, 0f), new Vector2(36f, 36f), PaintLeadSpot, LeadCaptionOff, ToggleLeadSpot);
+        // v9 (L) chord grids: LEAD (the stage lights' spotlight comes down on it while it sounds) — in the ⋯ card
+        spotBtn = Item("LeadSpot", Vector2.zero, new Vector2(36f, 36f), PaintLeadSpot, LeadCaptionOff, ToggleLeadSpot, more);
         spotArt = spotBtn.GetComponent<InkPainter>();
-        // the stickers standing on the ribbon: repeat style + vary (from ×2), fill the section (over flow)
-        styleBtn = TopSticker("Style", new Vector2(-88f, 48f), PaintStyle, "rewind", ToggleRewind, out styleArt);
-        varyBtn = TopSticker("Vary", new Vector2(-56f, 48f), PaintVary, "vary each repeat", CycleVary, out varyArt);
-        fillSecBtn = TopSticker("FillSection", new Vector2(-14f, 48f), PaintFillSection, "fill the section", FillTheSection, out fillSecArt, new Vector2(48f, 30f));
-        // stairs
-        typeBtn = Item("StairType", new Vector2(-146f, 0f), new Vector2(40f, 38f), PaintTypeButton, "stairs type", () => SetFan(!fanOpen));
+        // the repeat's extras: rewind + vary stand over the repeat button — from ×2 on and only while the pointer is on the repeat control
+        styleBtn = TopSticker("Style", new Vector2(-17f, 48f), PaintStyle, "rewind", ToggleRewind, out styleArt);
+        varyBtn = TopSticker("Vary", new Vector2(17f, 48f), PaintVary, "vary each repeat", CycleVary, out varyArt);
+        fillSecBtn = Item("FillSection", Vector2.zero, new Vector2(48f, 30f), PaintFillSection, "fill the section", FillTheSection, more);
+        fillSecArt = fillSecBtn.GetComponent<InkPainter>();
+        // stairs: the direction stays on the ribbon (its main job); kind, steps, speed and lead-in ride in the ⋯ card
+        typeBtn = Item("StairType", Vector2.zero, new Vector2(40f, 38f), PaintTypeButton, "stairs type", () => { bool open = !fanOpen; SetMore(false); SetFan(open); }, more);
         typeArt = typeBtn.GetComponent<InkPainter>();
-        dirBtn = Item("StairDir", new Vector2(-104f, 0f), new Vector2(34f, 36f), PaintDir, "falls", ToggleDir);
+        dirBtn = Item("StairDir", new Vector2(0f, 0f), new Vector2(34f, 36f), PaintDir, "falls", ToggleDir);
         dirArt = dirBtn.GetComponent<InkPainter>();
-        stepsDownBtn = Item("StepsDown", new Vector2(-72f, 0f), new Vector2(28f, 34f), p => PaintPlusMinus(p, false), "fewer steps", () => StepSteps(-1));
+        stepsNode = HudKit.Node(more, "Steps", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(84f, 36f));
+        stepsDownBtn = Item("StepsDown", new Vector2(-27f, 0f), new Vector2(28f, 34f), p => PaintPlusMinus(p, false), "fewer steps", () => StepSteps(-1), stepsNode);
         stepsDownArt = stepsDownBtn.GetComponent<InkPainter>();
-        var sd = HudKit.Node(band, "StepsDigit", new Vector2(0.5f, 0.5f), new Vector2(-50f, 1f), new Vector2(22f, 30f));
+        var sd = HudKit.Node(stepsNode, "StepsDigit", new Vector2(0.5f, 0.5f), new Vector2(0f, 1f), new Vector2(22f, 30f));
         stepsText = HudKit.Words(sd, "N", "4", 24f, Comic.Ink, TMPro.TextAlignmentOptions.Center);
         stepsText.font = Comic.DigitFont; stepsText.fontSharedMaterial = Comic.DigitFont != null ? Comic.DigitFont.material : stepsText.fontSharedMaterial;
         var srt = stepsText.rectTransform; srt.anchorMin = Vector2.zero; srt.anchorMax = Vector2.one; srt.offsetMin = Vector2.zero; srt.offsetMax = Vector2.zero;
-        stepsUpBtn = Item("StepsUp", new Vector2(-28f, 0f), new Vector2(28f, 34f), p => PaintPlusMinus(p, true), "more steps", () => StepSteps(1));
+        stepsUpBtn = Item("StepsUp", new Vector2(27f, 0f), new Vector2(28f, 34f), p => PaintPlusMinus(p, true), "more steps", () => StepSteps(1), stepsNode);
         stepsUpArt = stepsUpBtn.GetComponent<InkPainter>();
-        rateBtn = Item("StairRate", new Vector2(12f, 0f), new Vector2(38f, 36f), PaintRate, "step size", CycleRate);
+        rateBtn = Item("StairRate", Vector2.zero, new Vector2(38f, 36f), PaintRate, "step size", CycleRate, more);
         rateArt = rateBtn.GetComponent<InkPainter>();
-        leadBtn = Item("StairLead", new Vector2(54f, 0f), new Vector2(38f, 36f), PaintLead, "lead-in", ToggleLead);
+        leadBtn = Item("StairLead", Vector2.zero, new Vector2(38f, 36f), PaintLead, "lead-in", ToggleLead, more);
         leadArt = leadBtn.GetComponent<InkPainter>();
         BuildFan();
-        // phrase: ½ 1 2 4 + auto, double, cells
+        // phrase: ½ 1 2 4 + auto, double, cells — in the ⋯ card
         string[] lenWords = { "½", "1", "2", "4" };
         for (int k = 0; k < 5; k++)
         {
             int kk = k;
-            var b = Item(k < 4 ? "Len" + lenWords[k] : "LenAuto", new Vector2(k < 4 ? -150f + k * 29f : -30f, 0f), new Vector2(k < 4 ? 28f : 32f, 34f), p => PaintLen(p, kk),
-                         k < 4 ? LenCaption(k) : "auto length", () => SetLength(kk));
+            var b = Item(k < 4 ? "Len" + lenWords[k] : "LenAuto", Vector2.zero, new Vector2(k < 4 ? 28f : 32f, 34f), p => PaintLen(p, kk),
+                         k < 4 ? LenCaption(k) : "auto length", () => SetLength(kk), more);
             lenBtns[k] = b; lenArts[k] = b.GetComponent<InkPainter>();
             if (k < 4)
             {
@@ -601,40 +597,42 @@ public class IslandHeader : MonoBehaviour
                 var drt = d.rectTransform; drt.anchorMin = Vector2.zero; drt.anchorMax = Vector2.one; drt.offsetMin = Vector2.zero; drt.offsetMax = new Vector2(0f, 1f);
             }
         }
-        doubleBtn = Item("PhraseDouble", new Vector2(8f, 0f), new Vector2(36f, 36f), PaintDouble, "double it", DoubleIt);
+        doubleBtn = Item("PhraseDouble", Vector2.zero, new Vector2(36f, 36f), PaintDouble, "double it", DoubleIt, more);
         doubleArt = doubleBtn.GetComponent<InkPainter>();
-        cellsBtn = Item("PhraseCells", new Vector2(46f, 0f), new Vector2(36f, 36f), PaintCells, "cells", ToggleCells);
+        cellsBtn = Item("PhraseCells", Vector2.zero, new Vector2(36f, 36f), PaintCells, "cells", ToggleCells, more);
         cellsArt = cellsBtn.GetComponent<InkPainter>();
-        // §20.1 the keyboard's range: + an octave at its low end (left) / its high end (right) — the side where the keys would grow — and fit
-        keysBelowBtn = EndSticker("KeysBelow", -1, p => PaintKeysGrow(p, false), "+ octave below", () => GrowKeys(-1), out keysBelowArt);
-        keysAboveBtn = EndSticker("KeysAbove", 1, p => PaintKeysGrow(p, true), "+ octave above", () => GrowKeys(1), out keysAboveArt);
-        keysFitBtn = TopSticker("KeysFit", new Vector2(120f, 48f), PaintKeysFit, "fit to the melody", FitKeysToMelody, out keysFitArt, new Vector2(44f, 30f));
-        // the more card's duplicates for stairs / phrases (their bands have no room)
-        var mr = HudKit.Node(more, "DupRight2", new Vector2(0.5f, 0.5f), new Vector2(-44f, 0f), new Vector2(38f, 36f));
-        var mra = mr.gameObject.AddComponent<InkPainter>(); mra.onPaint = p => PaintDup(p, true);
-        moreDupRight = HudKit.Control(mra, "copy right", () => Duplicate(0), null, null, mra);
-        var mb = HudKit.Node(more, "DupBelow2", new Vector2(0.5f, 0.5f), new Vector2(-4f, 8f), new Vector2(38f, 36f));
-        var mba = mb.gameObject.AddComponent<InkPainter>(); mba.onPaint = p => PaintDup(p, false);
-        moreDupBelow = HudKit.Control(mba, "copy below", () => Duplicate(1), null, null, mba);
+        // §20.1 the keyboard's range: + an octave at its low end / its high end, fit to the melody — in the ⋯ card
+        keysBelowBtn = Item("KeysBelow", Vector2.zero, new Vector2(46f, 40f), p => PaintKeysGrow(p, false), "+ octave below", () => GrowKeys(-1), more);
+        keysBelowArt = keysBelowBtn.GetComponent<InkPainter>();
+        keysAboveBtn = Item("KeysAbove", Vector2.zero, new Vector2(46f, 40f), p => PaintKeysGrow(p, true), "+ octave above", () => GrowKeys(1), more);
+        keysAboveArt = keysAboveBtn.GetComponent<InkPainter>();
+        keysFitBtn = Item("KeysFit", Vector2.zero, new Vector2(44f, 30f), PaintKeysFit, "fit to the melody", FitKeysToMelody, more);
+        keysFitArt = keysFitBtn.GetComponent<InkPainter>();
 
         // which kinds show what (bit per kind: chord, Moon, keyboard, stairs, phrase)
-        foreach (var go in islandOnly) kindMask[go] = KGrids;
-        foreach (var go in moonOnly) kindMask[go] = KMoon;
-        foreach (var go in chordOnly) kindMask[go] = KChord;
-        kindMask[moreBtn.gameObject] = KGrids | KMoon;
-        kindMask[gripBtn.gameObject] = KGrids | KMoon;
-        foreach (var go in new[] { carryBtn.gameObject, dupRightBtn.gameObject, dupBelowBtn.gameObject, dupNode.gameObject, launchBtn.gameObject, fillSecBtn.gameObject }) kindMask[go] = KPlaying;
-        kindMask[styleBtn.gameObject] = KPlaying | KPhrase; kindMask[varyBtn.gameObject] = KPlaying | KPhrase;
-        kindMask[spotBtn.gameObject] = KChord;   // v9 (L): keyboards, stairs and phrases are lead anyway
-        foreach (var b in new[] { typeBtn, dirBtn, stepsDownBtn, stepsUpBtn, rateBtn, leadBtn }) kindMask[b.gameObject] = KStairs;
-        kindMask[sd.gameObject] = KStairs;
-        foreach (var b in lenBtns) kindMask[b.gameObject] = KPhrase;
-        kindMask[doubleBtn.gameObject] = KPhrase; kindMask[cellsBtn.gameObject] = KPhrase;
-        kindMask[moreDupRight.gameObject] = KStairs | KPhrase; kindMask[moreDupBelow.gameObject] = KStairs;
-        kindMask[keysBelowBtn.gameObject] = KKeys; kindMask[keysAboveBtn.gameObject] = KKeys; kindMask[keysFitBtn.gameObject] = KKeys;
-        keysBelowBtn.gameObject.SetActive(false); keysAboveBtn.gameObject.SetActive(false); keysFitBtn.gameObject.SetActive(false);
-        foreach (var kv in kindMask) if (kv.Value == KStairs || kv.Value == KPhrase || kv.Value == (KStairs | KPhrase)) kv.Key.SetActive(false);
+        Mask(KGrids | KMoon, gripBtn, moreBtn);
+        Mask(KGrids, eyeBtn, regNode, repeatBtn, dupRightBtn);
+        Mask(KChord | KKeys | KStairs, dupBelowBtn);
+        Mask(KPlaying, carryBtn, launchBtn, fillSecBtn);
+        Mask(KPlaying | KPhrase, styleBtn, varyBtn);
+        Mask(KChord, spotBtn, ghostAbove, ghostBelow, plusAbove, plusBelow, chordBtn, moodBtn, fillBtn, energyBtn, climbBtn, lblChord.transform, lblMood.transform, lblFill.transform, lblClimb.transform, lblEnergy.transform, lblLength.transform);
+        foreach (var b in barBtns) Mask(KChord, b);
+        Mask(KMoon, diceBtn);
+        Mask(KStairs, typeBtn, dirBtn, stepsNode, rateBtn, leadBtn);
+        foreach (var b in lenBtns) Mask(KPhrase, b);
+        Mask(KPhrase, doubleBtn, cellsBtn);
+        Mask(KKeys, keysBelowBtn, keysAboveBtn, keysFitBtn);
+        foreach (var kv in kindMask) if ((kv.Value & KChord) == 0) kv.Key.SetActive(false);
         styleBtn.gameObject.SetActive(false); varyBtn.gameObject.SetActive(false); fillSecBtn.gameObject.SetActive(false);
+
+        // the ⋯ card's plain cells, in reading order (LayoutMore flows the ones that show, five to a row)
+        AddCell(typeBtn); AddCell(stepsNode, 2); AddCell(rateBtn); AddCell(leadBtn);
+        foreach (var b in lenBtns) AddCell(b);
+        AddCell(doubleBtn); AddCell(cellsBtn);
+        AddCell(regNode, 2); AddCell(repeatBtn);   // (the repeat: only while it rides in the card — a staircase)
+        AddCell(carryBtn); AddCell(launchBtn); AddCell(spotBtn); AddCell(dupBelowBtn);
+        AddCell(keysBelowBtn); AddCell(keysAboveBtn); AddCell(keysFitBtn);
+        AddCell(copyPathsBtn); AddCell(pastePathsBtn); AddCell(pasteBtn); AddCell(fillSecBtn);
 
         Hints.Register("island.flow", carryBtn.transform as RectTransform);     // (§21: the extend control)
         Hints.Register("island.extend", carryBtn.transform as RectTransform);
@@ -647,6 +645,121 @@ public class IslandHeader : MonoBehaviour
         Hints.Register("stairs.dir", dirBtn.transform as RectTransform);
         Hints.Register("phrase.length", lenBtns[1].transform as RectTransform);
     }
+
+    void Mask(int kinds, params Component[] cs) { foreach (var c in cs) if (c != null) kindMask[c.gameObject] = kinds; }
+
+    // ------------------------------------------------------------------ Flow E2: the ⋯ card's layout
+    /// <summary>Flow E2 (the owner: "information is too condensed … BE SIMPLE AND MINIMALISTIC"): the ⋯ card is one calm, evenly spaced grid, five
+    /// columns of <see cref="CellW"/>. First the PLAIN cells — the controls that left the ribbon, pictures only, in rows of <see cref="RowPlain"/>
+    /// (octave ▼ ▲ — two columns —, extend, launch, lead · copy below, copy / paste paths, paste here, fill the section; a keyboard's octaves and
+    /// fit; a staircase's kind, steps, speed, lead-in and repeat; a melody roll's lengths, double, cells) — then, on a chord grid, its own settings
+    /// with their words underneath in rows of <see cref="RowWords"/> (chord, mood, drum fill, climb, energy · length · the trash can).</summary>
+    public const float CellW = 56f, RowPlain = 52f, RowWords = 68f, CardPad = 14f, LabelDrop = 29f, MoreScale = 1.08f;
+    public const int CardCols = 5;
+    struct Cell { public RectTransform rt; public int span; }
+    readonly List<Cell> flow = new List<Cell>();
+    GameObject lblChord, lblMood, lblFill, lblClimb, lblEnergy, lblLength;
+    RectTransform stepsNode;
+    int moreKey = int.MinValue; Vector2 moreSize = new Vector2(84f, 86f); float bandWNow = BandW;
+
+    void AddCell(Component c, int span = 1) { if (c != null) flow.Add(new Cell { rt = c.transform as RectTransform, span = span }); }
+    static float ColX(int col, int span) => (col + (span - 1) * 0.5f - (CardCols - 1) * 0.5f) * CellW;
+    /// <summary>The ⋯ card's size now (tests).</summary>
+    public Vector2 MoreSize => moreSize;
+    /// <summary>Tests: the control is one of the ribbon's (drawn at rest) / rides in the ⋯ card.</summary>
+    public bool OnRibbon(Component c) => c != null && c.gameObject.activeSelf && c.transform.IsChildOf(band);
+    public bool InMore(Component c) => c != null && c.gameObject.activeSelf && c.transform.IsChildOf(more);
+    /// <summary>Tests: every interactive control the header draws at rest (the ribbon, its stickers, the + ghosts) — not the ⋯ card's.</summary>
+    public List<string> RestControls()
+    {
+        var r = new List<string>();
+        foreach (var b in root.GetComponentsInChildren<HudButton>(false))
+            if (b.gameObject.activeInHierarchy && !b.transform.IsChildOf(more)) r.Add(b.name);
+        return r;
+    }
+    /// <summary>Tests: the ⋯ card's interactive controls (while it is open).</summary>
+    public List<string> MoreControls()
+    {
+        var r = new List<string>();
+        foreach (var b in more.GetComponentsInChildren<HudButton>(false)) if (b.gameObject.activeInHierarchy) r.Add(b.name);
+        return r;
+    }
+
+    void LayoutMore(int kind)
+    {
+        int key = kind + 11;
+        unchecked { foreach (var c in flow) key = key * 31 + (c.rt.gameObject.activeSelf && c.rt.parent == more ? 1 : 0); }
+        if (key == moreKey) return;
+        moreKey = key;
+        if (kind == 1)   // a Moon: only the trash can
+        {
+            moreSize = new Vector2(84f, 86f); more.sizeDelta = moreSize;
+            deleteRt.anchoredPosition = new Vector2(0f, 8f);
+            return;
+        }
+        int col = 0, row = 0, n = 0;
+        foreach (var c in flow)
+        {
+            if (!c.rt.gameObject.activeSelf || c.rt.parent != more) continue;
+            if (col + c.span > CardCols) { col = 0; row++; }
+            c.rt.anchoredPosition = new Vector2(ColX(col, c.span), -row);   // (y: the row for now)
+            col += c.span; n++;
+        }
+        int plain = n > 0 ? row + 1 : 0;
+        bool chordy = kind == 0;
+        float h = 2f * CardPad + plain * RowPlain + (chordy ? 2 : 1) * RowWords;
+        moreSize = new Vector2(CardCols * CellW + 2f * CardPad, h); more.sizeDelta = moreSize;
+        float top = h * 0.5f - CardPad;
+        foreach (var c in flow)
+        {
+            if (!c.rt.gameObject.activeSelf || c.rt.parent != more) continue;
+            var p = c.rt.anchoredPosition;
+            c.rt.anchoredPosition = new Vector2(p.x, top - (Mathf.Round(-p.y) + 0.5f) * RowPlain);
+        }
+        float y = top - plain * RowPlain - 24f;   // the icons' centre line of the first worded row
+        if (chordy)
+        {
+            PlaceWorded(chordBtn, lblChord, 0, y); PlaceWorded(moodBtn, lblMood, 1, y); PlaceWorded(fillBtn, lblFill, 2, y);
+            PlaceWorded(climbBtn, lblClimb, 3, y); PlaceWorded(energyBtn, lblEnergy, 4, y);
+            y -= RowWords;
+            float x0 = ColX(0, 1) - 6f;
+            for (int k = 0; k < 4; k++) ((RectTransform)barBtns[k].transform).anchoredPosition = new Vector2(x0 + k * 32f, y);
+            ((RectTransform)lblLength.transform).anchoredPosition = new Vector2(x0 + 48f, y - LabelDrop);
+        }
+        deleteRt.anchoredPosition = new Vector2(ColX(CardCols - 1, 1), y);
+    }
+
+    void PlaceWorded(Component c, GameObject label, int col, float y)
+    {
+        ((RectTransform)c.transform).anchoredPosition = new Vector2(ColX(col, 1), y);
+        ((RectTransform)label.transform).anchoredPosition = new Vector2(ColX(col, 1), y - LabelDrop);
+    }
+
+    // ---- Flow E2: the repeat's extras (−, rewind, vary) show from ×2 and only while the pointer is on the repeat control
+    float repeatHotUntil; int shownRepeatHot = -1;
+    /// <summary>Tests / tips: holds the repeat control "hot" for <paramref name="seconds"/> as the pointer resting on it would.</summary>
+    public void HoldRepeatHot(float seconds) { repeatHotUntil = Time.unscaledTime + Mathf.Max(0f, seconds); }
+    /// <summary>The pointer is on the repeat control: the button, its − disc, its rewind / vary stickers, or the strip between them (a short grace
+    /// lets it travel).</summary>
+    public bool RepeatHot()
+    {
+        bool hot = false;
+        if (group != null && group.blocksRaycasts && repeatBtn != null && repeatBtn.gameObject.activeInHierarchy)
+        {
+            hot = repeatBtn.Hover || (styleBtn != null && styleBtn.gameObject.activeInHierarchy && styleBtn.Hover) || (varyBtn != null && varyBtn.gameObject.activeInHierarchy && varyBtn.Hover);
+            if (!hot && repeatMinusBtn != null && repeatMinusBtn.gameObject.activeInHierarchy && repeatMinusBtn.Hover) hot = true;
+            Vector2 lp;
+            if (!hot && !PathManager.SimOnly && repeatBtn.transform.parent == band
+                && RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)repeatBtn.transform, Input.mousePosition, null, out lp))
+                hot = Mathf.Abs(lp.x) <= 40f && lp.y >= -26f && lp.y <= 68f;
+        }
+        if (hot) repeatHotUntil = Mathf.Max(repeatHotUntil, Time.unscaledTime + 0.3f);
+        return hot || Time.unscaledTime < repeatHotUntil;
+    }
+    HudButton repeatMinusBtn;
+    /// <summary>The − disc on the repeat (one pass fewer) and on the extend (split off the last grid) — tests.</summary>
+    public HudButton RepeatMinus => repeatMinusBtn;
+    public HudButton ExtendMinus => carryMinus != null ? carryMinus.GetComponent<HudButton>() : null;
 
     /// <summary>v7: a small cream sticker standing on the ribbon's top edge (the repeat style, the vary dice, the fill tab).</summary>
     HudButton TopSticker(string name, Vector2 pos, System.Action<InkPainter> paint, string caption, System.Action onClick, out InkPainter art, Vector2 size = default(Vector2))
@@ -688,13 +801,6 @@ public class IslandHeader : MonoBehaviour
 
     static string LenCaption(int k) => k == 0 ? "½ measure" : (k == 1 ? "1 measure" : (k == 2 ? "2 measures" : "4 measures · a section"));
 
-    /// <summary>§20.1: a sticker pinned on one end of the ribbon (<paramref name="side"/> −1 the left / low end, +1 the right / high end), over its tail.</summary>
-    HudButton EndSticker(string name, int side, System.Action<InkPainter> paint, string caption, System.Action onClick, out InkPainter art)
-    {
-        var b = TopSticker(name, new Vector2(side * (BandW * 0.5f + 32f), 3f), paint, caption, onClick, out art, new Vector2(46f, 40f));
-        b.transform.localEulerAngles = new Vector3(0f, 0f, side * -4f);
-        return b;
-    }
 
     // ---- §20.1 the keyboard's range
     /// <summary>A keyboard's range: 13 (one octave) .. 61 keys (five octaves).</summary>
@@ -1041,11 +1147,11 @@ public class IslandHeader : MonoBehaviour
         return now != null && now.IsPhrase && now.phraseGrid == ticks;
     }
 
-    /// <summary>A small lowercase word on the more card at (x, y) (centred; <paramref name="dx"/> shifts it right of a row of blocks).</summary>
-    GameObject MoreLabel(string text, float x, float y, float dx = 0f)
+    /// <summary>A small lowercase word on the more card (centred under its control; LayoutMore places it).</summary>
+    GameObject MoreLabel(string text)
     {
-        var t = HudKit.Words(more, "Label_" + text, text, 13f, Comic.A(Comic.Ink, 0.85f), dx > 0f ? TMPro.TextAlignmentOptions.MidlineLeft : TMPro.TextAlignmentOptions.Center);
-        var rt = t.rectTransform; rt.sizeDelta = new Vector2(dx > 0f ? 80f : 70f, 18f); rt.anchoredPosition = new Vector2(x + dx + (dx > 0f ? 40f : 0f), y);
+        var t = HudKit.Words(more, "Label_" + text, text, 13f, Comic.A(Comic.Ink, 0.85f), TMPro.TextAlignmentOptions.Center);
+        t.rectTransform.sizeDelta = new Vector2(70f, 18f);
         return t.gameObject;
     }
 
@@ -1228,6 +1334,8 @@ public class IslandHeader : MonoBehaviour
         if (moreOpen == on) return;
         moreOpen = on;
         HudKit.SetActive(more, on);
+        // the tutorial's "make it lower" points at the ⋯ until its card is open, then at ▼ ▲
+        Hints.Register("island.octave", on ? regNode : moreBtn.transform as RectTransform);
         if (on) { more.SetAsLastSibling(); ForceRefresh(); AudioPool.UI(ProceduralAudio.Pop(), 0.22f, 1.2f); }
     }
 
@@ -1339,7 +1447,7 @@ public class IslandHeader : MonoBehaviour
     }
 
     /// <summary>The ×n sticker: a small yellow paper tag, tilted, lettered in Bangers (hero punctuation); hidden at ×1.</summary>
-    void BuildRepeatSticker() { repeatSticker = BuildTimesSticker(repeatBtn.transform, "×2", out repeatText); repeatMinus = BuildMinus(repeatBtn.transform, "repeat one time less", StepDownRepeat); }
+    void BuildRepeatSticker() { repeatSticker = BuildTimesSticker(repeatBtn.transform, "×2", out repeatText); repeatMinus = BuildMinus(repeatBtn.transform, "repeat one time less", StepDownRepeat); repeatMinusBtn = repeatMinus.GetComponent<HudButton>(); }
 
     /// <summary>A small − disc on a button's lower-left corner (hidden until shown): steps the repeat / the extend down by one.</summary>
     RectTransform BuildMinus(Transform on, string caption, System.Action onClick)
@@ -1457,7 +1565,7 @@ public class IslandHeader : MonoBehaviour
     {
         n = Mathf.Clamp(n, 1, 4);
         if (repeatArt != null) repeatArt.Repaint();
-        if (repeatMinus != null && repeatMinus.gameObject.activeSelf != n > 1) repeatMinus.gameObject.SetActive(n > 1);
+        shownRepeatHot = -1;   // (its − follows the pointer: RefreshV7)
         if (repeatSticker == null) return;
         repeatSticker.gameObject.SetActive(n > 1);
         if (n > 1 && repeatText != null) repeatText.text = "×" + n;
@@ -1884,21 +1992,27 @@ public class IslandHeader : MonoBehaviour
         p.Disc(new Vector2(c.x, body.yMax), 9.4f, 2.6f, Color.white);
     }
 
-    static void PaintTearOff(InkPainter p)
+    static void PaintTearOff(InkPainter p) { PaintTrash(p, p.Area.center, 1f); }
+
+    /// <summary>Times <see cref="PaintTrash"/> drew (tests: a control that repaints and raises this draws the trash can).</summary>
+    public static int TrashPaints;
+    /// <summary>DELETE, everywhere (the owner: "delete = a trash can, never ✕"): a small red paper corner with a ragged edge and a cream trash can
+    /// (🗑) on it — the island ⋯ card's, shared by the section header, the selection bar and the clipboard chip. <paramref name="k"/> scales it
+    /// (1 = 30 × 26 px).</summary>
+    public static void PaintTrash(InkPainter p, Vector2 c, float k = 1f)
     {
-        Vector2 c = p.Area.center;
-        // a small red paper corner with a ragged edge and a cream trash can (🗑)
+        TrashPaints++;
         q.Clear();
-        q.Add(c + new Vector2(-15f, -12f)); q.Add(c + new Vector2(15f, -13f)); q.Add(c + new Vector2(14f, 12f));
-        q.Add(c + new Vector2(6f, 9f)); q.Add(c + new Vector2(0f, 13f)); q.Add(c + new Vector2(-6f, 9f)); q.Add(c + new Vector2(-14f, 12f));
-        p.Shift = new Vector2(2.5f, -3f); p.Fill(q, q.Count, Comic.A(Comic.Ink, 0.85f)); p.Shift = Vector2.zero;
+        q.Add(c + new Vector2(-15f, -12f) * k); q.Add(c + new Vector2(15f, -13f) * k); q.Add(c + new Vector2(14f, 12f) * k);
+        q.Add(c + new Vector2(6f, 9f) * k); q.Add(c + new Vector2(0f, 13f) * k); q.Add(c + new Vector2(-6f, 9f) * k); q.Add(c + new Vector2(-14f, 12f) * k);
+        p.Shift = new Vector2(2.5f, -3f) * k; p.Fill(q, q.Count, Comic.A(Comic.Ink, 0.85f)); p.Shift = Vector2.zero;
         p.InkFill(q, q.Count, Comic.Danger, 1.8f, Comic.Ink);
-        Vector2 t = c + new Vector2(0f, -1f);
-        q.Clear(); q.Add(t + new Vector2(-5.5f, 3.5f)); q.Add(t + new Vector2(5.5f, 3.5f)); q.Add(t + new Vector2(4.2f, -8f)); q.Add(t + new Vector2(-4.2f, -8f));
+        Vector2 t = c + new Vector2(0f, -1f) * k;
+        q.Clear(); q.Add(t + new Vector2(-5.5f, 3.5f) * k); q.Add(t + new Vector2(5.5f, 3.5f) * k); q.Add(t + new Vector2(4.2f, -8f) * k); q.Add(t + new Vector2(-4.2f, -8f) * k);
         p.Fill(q, 4, Comic.Cream);
-        p.Line(t + new Vector2(-7.5f, 5.5f), t + new Vector2(7.5f, 5.5f), 2.2f, Comic.Cream, true);
-        p.Line(t + new Vector2(-2f, 7.5f), t + new Vector2(2f, 7.5f), 2f, Comic.Cream, true);
-        for (int k = -1; k <= 1; k++) p.Line(t + new Vector2(k * 2.2f, 1.5f), t + new Vector2(k * 1.8f, -6f), 1f, Comic.Danger);
+        p.Line(t + new Vector2(-7.5f, 5.5f) * k, t + new Vector2(7.5f, 5.5f) * k, 2.2f * k, Comic.Cream, true);
+        p.Line(t + new Vector2(-2f, 7.5f) * k, t + new Vector2(2f, 7.5f) * k, 2f * k, Comic.Cream, true);
+        for (int i = -1; i <= 1; i++) p.Line(t + new Vector2(i * 2.2f, 1.5f) * k, t + new Vector2(i * 1.8f, -6f) * k, 1f * k, Comic.Danger);
     }
 
     void PaintGhost(InkPainter p, Vector2[] poly, bool ok, float shake)
@@ -1955,12 +2069,11 @@ public class IslandHeader : MonoBehaviour
     bool Hovering()
     {
         if (group == null || !group.blocksRaycasts) return false;
-        if (gripBtn.Hover || eyeBtn.Hover || regDownBtn.Hover || regUpBtn.Hover || dupRightBtn.Hover || dupBelowBtn.Hover || moreBtn.Hover || diceBtn.Hover || repeatBtn.Hover) return true;
-        if ((carryBtn != null && carryBtn.Hover) || (pasteBtn != null && pasteBtn.gameObject.activeInHierarchy && pasteBtn.Hover)) return true;
-        if ((copyPathsBtn != null && copyPathsBtn.gameObject.activeInHierarchy && copyPathsBtn.Hover) || (pastePathsBtn != null && pastePathsBtn.gameObject.activeInHierarchy && pastePathsBtn.Hover)) return true;
+        if (gripBtn.Hover || eyeBtn.Hover || dupRightBtn.Hover || moreBtn.Hover || diceBtn.Hover || repeatBtn.Hover) return true;
         if (V7Hover()) return true;
         if (addAboveBtn.Hover || addBelowBtn.Hover) return true;
         if (moreOpen && RectTransformUtility.RectangleContainsScreenPoint(more, Input.mousePosition, null)) return true;
+        if (Time.unscaledTime < repeatHotUntil) return true;   // the pointer is travelling to the repeat's − / rewind / vary
         return RectTransformUtility.RectangleContainsScreenPoint(band, Input.mousePosition, null);
     }
 
@@ -1986,8 +2099,14 @@ public class IslandHeader : MonoBehaviour
         if (Presenter.Active || MainMenu.IsShown || CubeInspector.IsOpen) return true;
         if (WorldInput.WorldLocked) return true;
         if (UIManager.I != null && UIManager.I.CardShown > 0.05f) return true;
+        // Flow E2: a cube or a pattern in the hand means "I am placing notes" — the ribbon and the + ghosts stay away (they ate clicks meant for
+        // tiles) and return with an empty hand; the selected island's ribbon too. Only the tutorial's own pin holds (it teaches the ribbon).
+        if (HandFull && !(pinned != null && Onboarding.Active)) return true;
         return false;
     }
+
+    /// <summary>Flow E2: a cube or a copied pattern is in the hand.</summary>
+    public static bool HandFull => PathManager.I != null && PathManager.I.Hand != PathManager.HandKind.Empty;
 
     void Update()
     {
@@ -2073,7 +2192,7 @@ public class IslandHeader : MonoBehaviour
     }
 
     void ForceRefresh() { shownClimb = -1; shownSleep = -1; shownReg = 99; shownBars = -1; shownEnergy = -1; shownFall = -1; shownMood = -1; shownFill = -1; shownRepeat = -1; shownCarry = -1; shownPasteKey = int.MinValue; shownQ = (ChordQuality)(-1); shownChord = new Color(-1f, 0f, 0f); shownFor = null;
-        shownKind = -1; shownRewind = -1; shownVary = -1; shownLaunch = -1; shownSpot = -1; shownFillSec = -1; shownStair = int.MinValue; shownPhrase = int.MinValue; shownStyleVis = -1; shownKeys = int.MinValue; }
+        shownKind = -1; shownRewind = -1; shownVary = -1; shownLaunch = -1; shownSpot = -1; shownFillSec = -1; shownStair = int.MinValue; shownPhrase = int.MinValue; shownStyleVis = -1; shownKeys = int.MinValue; shownPathsKey = -1; shownRepeatHot = -1; moreKey = int.MinValue; }
 
     /// <summary>Repaints only what changed on the target island.</summary>
     void RefreshLook()
@@ -2086,19 +2205,14 @@ public class IslandHeader : MonoBehaviour
             if (kind != shownKind || shownFor != kb) SetFan(false);
             shownFor = kb; wasMoon = moon; wasKeyboard = keyboard; shownKind = kind;
             LayoutBand(kind);
-            // v7: every control shows for the kinds it serves (v6: a keyboard keeps grip, eye, register, repeat, carry, duplicate, more (delete);
-            // v7: stairs and phrases have their own bands, their duplicates in the more card)
+            // every control shows for the kinds it serves — on the ribbon (five at rest) or in the ⋯ card (LayoutMore flows what shows)
             int bit = 1 << kind;
             foreach (var kv in kindMask) { bool on = (kv.Value & bit) != 0; if (kv.Key.activeSelf != on) kv.Key.SetActive(on); }
-            bool chordy = kind == 0;
-            if (!chordy) { aboveOk = belowOk = false; }
-            if (more != null) more.sizeDelta = chordy ? new Vector2(264f, 176f) : (kind == 3 ? new Vector2(150f, 86f) : (kind == 4 ? new Vector2(112f, 86f) : new Vector2(84f, 86f)));   // (room for the word under delete)
-            if (deleteRt != null) deleteRt.anchoredPosition = chordy ? new Vector2(98f, -46f) : (kind == 3 ? new Vector2(44f, 8f) : (kind == 4 ? new Vector2(24f, 8f) : new Vector2(0f, 8f)));
-            if (moreDupRight != null) moreDupRight.GetComponent<RectTransform>().anchoredPosition = kind == 4 ? new Vector2(-24f, 8f) : new Vector2(-44f, 8f);
+            if (kind != 0) { aboveOk = belowOk = false; }
             if (moreOpen) more.gameObject.SetActive(true);
             gripBtn.GetComponent<InkPainter>().Repaint(); diceBtn.GetComponent<InkPainter>().Repaint();
             if (carryArt != null) carryArt.Repaint();
-            shownStyleVis = -1; shownFillSec = -1;
+            shownStyleVis = -1; shownFillSec = -1; shownRepeatHot = -1; shownPasteKey = int.MinValue; shownPathsKey = -1; shownKeys = int.MinValue; moreKey = int.MinValue;
         }
         RefreshV7(kb, kind);
         if (kind >= 2 && (HudKit.TwosTick != kindsTick || shownStair == int.MinValue || shownPhrase == int.MinValue || shownKeys == int.MinValue)) { kindsTick = HudKit.TwosTick; RefreshKinds(kb, kind); }   // (on twos: it reads the chord / the notes)
@@ -2163,6 +2277,7 @@ public class IslandHeader : MonoBehaviour
             float k = Look.Stepped(1f - copyPathsPop);
             copyPathsBtn.transform.localScale = Vector3.one * (copyPathsPop <= 0f ? 1f : (k < 0.34f ? 1.3f : (k < 0.67f ? 0.92f : 1f)));
         }
+        LayoutMore(kind);
         if (!moreOpen || moon) return;
         if (kb.bars != shownBars) { shownBars = kb.bars; foreach (var a in barArts) a.Repaint(); }
         if (kb.energy != shownEnergy) { shownEnergy = kb.energy; energyArt.Repaint(); }
@@ -2196,8 +2311,15 @@ public class IslandHeader : MonoBehaviour
     {
         int bit = 1 << Mathf.Max(0, kind);
         bool playing = (bit & KPlaying) != 0;
-        // the repeat style + vary stickers stand up from ×2 (grids that repeat; stairs never vary)
-        int vis = ((bit & (KPlaying | KPhrase)) != 0 && kb.repeat >= 2) ? 1 : 0;
+        // Flow E2: the repeat's extras — its − disc, and (grids that repeat; stairs never vary) the rewind + vary stickers — show from ×2 on and
+        // only while the pointer is on the repeat control; at rest the ribbon stays five things
+        int hot = !kb.IsMoon && kb.repeat >= 2 && RepeatHot() ? 1 : 0;
+        if (hot != shownRepeatHot)
+        {
+            shownRepeatHot = hot;
+            if (repeatMinus != null && repeatMinus.gameObject.activeSelf != (hot == 1)) repeatMinus.gameObject.SetActive(hot == 1);
+        }
+        int vis = ((bit & (KPlaying | KPhrase)) != 0 && hot == 1) ? 1 : 0;
         if (vis != shownStyleVis) { shownStyleVis = vis; HudKit.SetActive(styleBtn, vis == 1); HudKit.SetActive(varyBtn, vis == 1); if (vis == 1) { styleArt.Repaint(); varyArt.Repaint(); } }
         int rw = kb.rewind ? 1 : 0;
         if (rw != shownRewind) { shownRewind = rw; if (styleArt != null) styleArt.Repaint(); InkCaption.Attach(styleBtn.gameObject, kb.rewind ? "rewind · on" : "rewind"); }
@@ -2278,7 +2400,7 @@ public class IslandHeader : MonoBehaviour
         float ang = Mathf.Atan2(s1.y - s0.y, s1.x - s0.x) * Mathf.Rad2Deg;
         ang = Mathf.Clamp(Mathf.DeltaAngle(0f, ang), -6f, 6f);
         float span = (new Vector2(s1.x, s1.y) - new Vector2(s0.x, s0.y)).magnitude / Mathf.Max(0.01f, root.lossyScale.x);
-        float sc = Mathf.Clamp(span / 360f, 1f, 1.12f);   // never below 1×: every hit stays ≥ 28 px
+        float sc = Mathf.Clamp(span / 330f, 1.12f, 1.28f);   // Flow E2: fewer, larger shapes (never below 1×: every hit stays ≥ 28 px)   // never below 1×: every hit stays ≥ 28 px
         ribbon.localEulerAngles = new Vector3(0f, 0f, ang);
         ribbon.localScale = new Vector3(sc, sc, 1f);
         ribbon.anchoredPosition = KeepClear(lp + (Vector2)(Quaternion.Euler(0f, 0f, ang) * new Vector2(0f, 23f * sc)), sc, ang);   // the band's bottom rests on the edge
@@ -2293,51 +2415,47 @@ public class IslandHeader : MonoBehaviour
     public const float ClearLeft = 100f, ClearRight = 16f, ClearBottom = 84f, ClearTop = 92f;
     /// <summary>The transport's corner: its right end, and the clearance above it (the punch row tops out at 176 while playing).</summary>
     public const float TransportRight = 400f, ClearTransport = 188f;
-    /// <summary>The paper band's width (v5: 336, room for the repeat button; v6: 380, room for carry; v7: 492, room for flow and launch — and the
-    /// stairs / phrase bands) and the more card's x under it (its right edge under the ⋯).</summary>
-    public const float BandW = 492f, MoreX = 99f;
-    const float HalfW = BandW * 0.5f + 28f, HalfH = 27f, MoreDrop = 181f, MoreHalfW = 132f;
-    bool moreUp, moreSmall;
+    /// <summary>The paper band's width (v5: 336; v6: 380; v7: 492, room for flow and launch; Flow E2: 268 — five things with air between them:
+    /// move, mute, repeat, copy, ⋯; everything else rides in the ⋯ card).</summary>
+    public const float BandW = 268f;
+    const float HalfH = 27f;
 
-    /// <summary>v6 (integration): a Moon's ribbon holds only the grip, the dice and ⋯ — a short band with them side by side (on the islands' wide
-    /// band they stood far apart on an empty strip); islands and keyboards keep the full band.</summary>
+    /// <summary>The ribbon's five slots (Flow E2). Grids: move, mute, the kind's main job — repeat (chord grids, keyboards, melody rolls) or a
+    /// staircase's direction (its repeat rides in the ⋯ card) —, copy, ⋯. A Moon: move, dice, ⋯ on a short band.</summary>
     void LayoutBand(int kind)
     {
         bool moon = kind == 1;
         float w = moon ? MoonBandW : BandW;
+        bandWNow = w;
         band.sizeDelta = new Vector2(w, 46f); ribbon.sizeDelta = new Vector2(w + 8f, 60f);
         tailL.rectTransform.anchoredPosition = new Vector2(-w * 0.5f - 4f, -9f); tailR.rectTransform.anchoredPosition = new Vector2(w * 0.5f + 4f, -9f);
-        Pos(gripBtn, moon ? -50f : -226f);
-        Pos(diceBtn, moon ? 0f : -60f);
-        Pos(moreBtn, moon ? 50f : 214f);
+        Pos(gripBtn, moon ? -50f : -104f);
+        Pos(diceBtn, 0f);
+        Pos(moreBtn, moon ? 50f : 104f);
+        moreKey = int.MinValue;
         if (moon) return;
-        Pos(eyeBtn, -188f);
-        // register ▼ ladder ▲ and repeat: where each kind has room for them
-        float reg = kind == 3 ? 112f : (kind == 4 ? 102f : -134f), rep = kind == 3 ? 172f : (kind == 4 ? 166f : -72f);
-        Pos(regDownBtn, reg - 22f); Pos(regUpBtn, reg + 22f); regNode.anchoredPosition = new Vector2(reg, 0f);
-        var lad = band.Find("Ladder") as RectTransform; if (lad != null) lad.anchoredPosition = new Vector2(reg, 0f);
-        Pos(repeatBtn, rep);
-        // chord islands / keyboards: carry, flow, launch, the duplicates (v7 positions on the 492 band)
-        Pos(carryBtn, -22f); Pos(launchBtn, 32f); Pos(dupRightBtn, 90f); Pos(dupBelowBtn, 132f); Pos(spotBtn, 173f); dupNode.anchoredPosition = new Vector2(111f, 0f);   // (§21: one extend control)
-        // the stickers standing over the repeat button; the paste tab clear of them
-        styleBtn.GetComponent<RectTransform>().anchoredPosition = new Vector2(rep - 16f, 48f);
-        varyBtn.GetComponent<RectTransform>().anchoredPosition = new Vector2(rep + 16f, 48f);
-        if (pasteBtn != null) pasteBtn.GetComponent<RectTransform>().anchoredPosition = new Vector2(kind == 4 ? 40f : w * 0.5f - 64f, 47f);
-        if (copyPathsBtn != null) copyPathsBtn.GetComponent<RectTransform>().anchoredPosition = new Vector2(kind == 4 ? 92f : 74f, 47f);
-        if (pastePathsBtn != null) pastePathsBtn.GetComponent<RectTransform>().anchoredPosition = new Vector2(kind == 4 ? 144f : 126f, 47f);
+        Pos(eyeBtn, -52f); Pos(dupRightBtn, 52f); Pos(dirBtn, 0f);
+        bool stairs = kind == 3;
+        var rp = repeatBtn.transform;
+        if (stairs && rp.parent != more) rp.SetParent(more, false);
+        else if (!stairs && rp.parent != band) rp.SetParent(band, false);
+        if (!stairs) Pos(repeatBtn, 0f);
     }
 
     static void Pos(HudButton b, float x) { if (b != null) b.GetComponent<RectTransform>().anchoredPosition = new Vector2(x, 0f); }
     /// <summary>v6: the width of a Moon's ribbon band (islands: <see cref="BandW"/>).</summary>
     public const float MoonBandW = 170f;
-    float moreSmallX = -1f;
 
     Vector2 KeepClear(Vector2 c, float sc, float ang)
     {
         Rect r = root.rect;
         float sn = Mathf.Abs(Mathf.Sin(ang * Mathf.Deg2Rad)), cs = Mathf.Cos(ang * Mathf.Deg2Rad);   // the tilt lowers one end
-        float halfW = HalfW + (wasKeyboard ? 26f : 0f);   // §20.1: a keyboard's range stickers stand past the ribbon's ends
-        float hw = (halfW * cs + HalfH * sn) * sc, hh = (HalfH * cs + halfW * sn) * sc, drop = (MoreDrop * cs + MoreHalfW * sn) * sc;
+        float halfW = bandWNow * 0.5f + 28f;
+        // the ⋯ card keeps its own size whatever the ribbon's scale; it hangs under the band, its right edge under the ⋯
+        float k = MoreScale / Mathf.Max(0.01f, sc);
+        float cardW = moreSize.x * k, cardH = moreSize.y * k;
+        float my = 23f + 10f + cardH * 0.5f;
+        float hw = (halfW * cs + HalfH * sn) * sc, hh = (HalfH * cs + halfW * sn) * sc, drop = ((my + cardH * 0.5f) * cs + cardW * 0.5f * sn) * sc;
         float x0 = r.xMin + ClearLeft + hw, x1 = r.xMax - ClearRight - hw;
         if (x0 <= x1) c.x = Mathf.Clamp(c.x, x0, x1);
         // over the transport's corner the floor rises (eased over 80 units, so sliding past its end never jumps)
@@ -2346,9 +2464,9 @@ public class IslandHeader : MonoBehaviour
         if (y0 <= y1) c.y = Mathf.Clamp(c.y, y0, y1);
         // the more card hangs under the band; without room there it opens above
         bool up = c.y - drop < r.yMin + bottom && c.y + drop <= r.yMax - ClearTop;
-        bool small = wasMoon || wasKeyboard || shownKind == 3 || shownKind == 4;   // v6: a Moon's / keyboard's more card holds only the delete: small, under the ⋯
-        float smallX = wasMoon ? 28f : (shownKind == 3 ? 156f : (shownKind == 4 ? 175f : 188f));   // (v7: stairs / phrases add their duplicates)
-        if (up != moreUp || small != moreSmall || smallX != moreSmallX) { moreUp = up; moreSmall = small; moreSmallX = smallX; more.anchoredPosition = small ? new Vector2(smallX, up ? 76f : -76f) : new Vector2(MoreX, up ? 119f : -119f); }
+        var at = new Vector2(Mathf.Min(bandWNow * 0.5f - cardW * 0.5f + 6f, bandWNow * 0.5f), up ? my : -my);
+        if ((more.anchoredPosition - at).sqrMagnitude > 0.01f) more.anchoredPosition = at;
+        if (Mathf.Abs(more.localScale.x - k) > 1e-3f) more.localScale = new Vector3(k, k, 1f);
         return c;
     }
 
@@ -2372,14 +2490,7 @@ public class IslandHeader : MonoBehaviour
         if (changed || moved) { ghostAbove.Repaint(); ghostBelow.Repaint(); moved = false; }
         int slotsN = GhostSlots();   // v8: a multi-measure grid's ghosts draw a + per measure themselves, except slot 0's: that stays the real button
         HudKit.SetActive(plusAbove, okA); HudKit.SetActive(plusBelow, okB);
-        // the side +s: on the middle of the west / east edges (a copy before / after it)
-        float zm = (kb.FrontEdge + kb.BackEdge) * 0.5f + shown.z;
-        Vector2 lp, rp;
-        const float out_ = 0.55f;   // just past the edge, clear of the grid's own tiles and cubes
-        bool okL = EdgePoint(cam, new Vector3(x0 - out_, y, zm), out lp), okR = EdgePoint(cam, new Vector3(x1 + out_, y, zm), out rp);
-        HudKit.SetActive(plusLeft, okL); HudKit.SetActive(plusRight, okR);
-        if (okL) plusLeft.anchoredPosition = lp;
-        if (okR) plusRight.anchoredPosition = rp;
+        // (Flow E2: the side +s — a copy before / after it — are no longer drawn: "copy" on the ribbon says it)
         if (okA) plusAbove.anchoredPosition = slotsN < 2 ? Centroid(polyAbove) : SlotCentre(polyAbove, 0, slotsN);
         if (okB) plusBelow.anchoredPosition = slotsN < 2 ? Centroid(polyBelow) : SlotCentre(polyBelow, 0, slotsN);
     }

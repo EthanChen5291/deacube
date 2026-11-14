@@ -455,15 +455,16 @@ public class KeyHands : MonoBehaviour
             int id = cube.id != 0 ? cube.id : cube.GetInstanceID();
             cubeOf[id] = cube;
             int last = -1;
-            for (int k = 0; k < 4096; k++)
+            float woff = win.offset;   // Flow (F1): a span cube's through window counts its steps in pattern beats (0 for every other window)
+            for (int k = cube.FirstStepIn(w), g = 0; g < 4096; k++, g++)
             {
-                float s = cube.StepStartLocalBeat(k);
+                float s = cube.StepStartLocalBeat(k) - woff;
                 if (s >= length - 1e-4f) break;
                 var h = cube.Decide(w, k, pass);
                 if (!h.hit) continue;
                 float e;
-                if (dur) e = Mathf.Min(length, cube.StepStartLocalBeat(k + 1));
-                else { int nh = cube.NextPatternHitStep(k, length); e = nh >= 0 ? cube.StepStartLocalBeat(nh) : length; }
+                if (dur) e = Mathf.Min(length, cube.StepStartLocalBeat(k + 1) - woff);
+                else { int nh = cube.NextPatternHitStep(k, length + woff); e = nh >= 0 ? cube.StepStartLocalBeat(nh) - woff : length; }
                 if (!h.fires) continue;
                 var t = cube.TileAt(w, h.node);
                 if (t == null || t.island != Island) continue;

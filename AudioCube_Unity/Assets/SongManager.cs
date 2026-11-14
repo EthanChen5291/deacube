@@ -418,6 +418,9 @@ public class SongManager : MonoBehaviour
     /// v7 §21 (the user: "just keep cubes on each grid. only explore grids moving from left to right with the long grid"): every carried window is a
     /// FLOW window (carryStyle is ignored) and the targets are the grids of the source's LANE in its SECTION (<see cref="CarryTargets(int)"/>: the
     /// long grid); a Rider is an ordinary cube of its home island (no windows on other islands; the `rider` flag stays in the file, ignored).
+    /// Flow (F1, SPEC flow §1) SPAN: a resident cube with span ≥ 1 gets, after its home windows, one THROUGH window per pass on each of the next span
+    /// grids of its home grid's lane (<see cref="SpanTargets"/>; through = true, hop = its place in the chain, offset = the pass lengths of the chain
+    /// grids before it, silent when home or that grid sleeps) and no carried windows — whatever its island's carry. A cube with span 0 is untouched.
     /// </summary>
     public void RecomputeMeasureStarts()
     {
@@ -518,6 +521,27 @@ public class SongManager : MonoBehaviour
                     // long grid: re-voiced by pedal, an ordinary step into the next measure), whatever the island's carryStyle
                     var targets = m < carryBuf.Count ? carryBuf[m] : null;
                     const bool flow = true;
+                    // Flow (F1, SPEC flow §1) SPAN: a cube with a span is ONE melody walking on through its lane — after its home windows, one THROUGH
+                    // window per pass on each of the next span grids (the chain that exists), its offset = the pass lengths of the chain grids before
+                    // it: the pattern's time runs on there, on that grid's own tiles. It takes no carried windows: on an extending home the melody
+                    // starts over every span + 1 grids of the long grid instead (the same through windows, the offset back at 0).
+                    if (cube.span > 0)
+                    {
+                        SpanTargets(cube, spanBuf);
+                        int block = spanBuf.Count + 1;
+                        if (targets != null && spanBuf.Count == cube.span) for (int k = spanBuf.Count; k < targets.Count; k++) spanBuf.Add(targets[k]);
+                        float off = pl;
+                        for (int k = 0; k < spanBuf.Count; k++)
+                        {
+                            var tgt = spanBuf[k]; int tc = tgt != null ? tgt.column : -1;
+                            if (tc < 0 || tc >= colStart.Count) break;
+                            if ((k + 1) % block == 0) off = 0f;
+                            for (int p = 0; p < colPasses[tc]; p++)
+                                wl.Add(new AudioCube.Window { start = colStart[tc] + p * colPass[tc] + OffsetBeats(tgt, bpb), length = Mathf.Min(colPass[tc], tgt.LengthBeats), island = tgt, order = tc, silent = kb.sleep || tgt.sleep, hop = k + 1, pass = p, through = true, offset = off });
+                            off += colPass[tc];
+                        }
+                        targets = null;
+                    }
                     if (targets != null)
                         for (int k = 0; k < targets.Count; k++)
                         {
@@ -543,6 +567,7 @@ public class SongManager : MonoBehaviour
     /// <summary>v6: every keyboard's chord-tone dots follow its column's chord (a rebuild, a move, a relayout may change it).</summary>
     void RefreshKeyboards() { foreach (var kb in Islands) if (kb != null) { if (kb.IsKeyboard) kb.RefreshKeyDots(); else if (kb.IsStairs || kb.IsPhrase) kb.RefreshKindChords(); } }   // v7: + the stairs' steps, the phrases' chord tints (B)
     readonly List<List<KeyBlock>> carryBuf = new List<List<KeyBlock>>();
+    readonly List<KeyBlock> spanBuf = new List<KeyBlock>(ProjectConfig.MaxCarry + 1);
     readonly List<int> colFirst = new List<int>(), colCount = new List<int>(), colPasses = new List<int>();
     readonly List<float> colStart = new List<float>(), colLen = new List<float>(), colPass = new List<float>();
 
@@ -1507,6 +1532,7 @@ public class SongManager : MonoBehaviour
             foreach (var c in SequenceMaster.Cubes)
             {
                 if (c == null || !c.isFinalized || c.IsOnMoon || c.Island != src || c.nodes.Count == 0) continue;
+                if (c.span > 0) continue;   // Flow (F1): a span cube walks its lane by itself (its windows are not the extend's): nothing to bake
                 var tiles = c.TilesOn(t);
                 if (tiles.Count != c.nodes.Count) continue;   // it never played there (a drum path, a rider)
                 var s = CubeState.Clone(c.ToState());
@@ -1553,6 +1579,67 @@ public class SongManager : MonoBehaviour
             if (t == null) break;
             into.Add(t);
         }
+    }
+
+    // ------------------------------------------------------------------ Flow (F1, SPEC flow §1): SPAN — a cube walking on through its lane
+    /// <summary>Flow (F1): the grids cube <paramref name="c"/>'s span walks on after its home grid, in order, into <paramref name="into"/> (cleared
+    /// first; no allocation): the <see cref="LaneNext"/> chain from its home grid, at most c.span long, stopping where the lane ends (the section's
+    /// end, a column without a grid in that lane). Empty for span 0, a Moon cube, stairs and phrases. The through windows use exactly these.</summary>
+    public void SpanTargets(AudioCube c, List<KeyBlock> into)
+    {
+        if (into == null) return;
+        into.Clear();
+        if (c == null || c.span <= 0 || c.moon >= 0 || c.Moon != null) return;
+        int m = c.assignedGridIndex;
+        var t = m >= 0 && m < Islands.Count && Islands[m] != null ? Islands[m] : c.Island;
+        for (int k = 0; k < Mathf.Min(c.span, ProjectConfig.MaxCarry) && t != null; k++)
+        {
+            t = LaneNext(t);
+            if (t != null) into.Add(t);
+        }
+    }
+
+    /// <summary>Flow (F1): the chain a cube with <paramref name="span"/> on <paramref name="home"/> plays on — home first, then the next grids of its
+    /// lane (what exists: shorter than span + 1 where the lane ends). A new list.</summary>
+    public List<KeyBlock> SpanChain(KeyBlock home, int span)
+    {
+        var r = new List<KeyBlock>(ProjectConfig.MaxCarry + 1);
+        if (home == null) return r;
+        r.Add(home);
+        var t = home;
+        for (int k = 0; k < Mathf.Min(span, ProjectConfig.MaxCarry); k++)
+        {
+            t = LaneNext(t);
+            if (t == null) break;
+            r.Add(t);
+        }
+        return r;
+    }
+
+    /// <summary>Flow (F1): the lane of <paramref name="home"/> has <paramref name="span"/> more grids after it (a span that long plays all of itself).</summary>
+    public static bool CanSpan(KeyBlock home, int span) => I != null && home != null && span >= 0 && span <= ProjectConfig.MaxCarry && I.SpanChain(home, span).Count == span + 1;
+
+    /// <summary>Flow (F1): true when some span cube's chain (SpanTargets now) differs from the grids its through windows were made on (a grid moved
+    /// into / out of its lane). Nothing to do — and nothing read — in a song without span cubes.</summary>
+    bool SpanChainsMoved()
+    {
+        List<KeyBlock> tmp = null;
+        foreach (var c in SequenceMaster.Cubes)
+        {
+            if (c == null || c.span <= 0) continue;
+            if (tmp == null) tmp = new List<KeyBlock>(ProjectConfig.MaxCarry + 1);
+            SpanTargets(c, tmp);
+            int at = 0;
+            for (int w = 0; w < c.windows.Count; w++)
+            {
+                var wi = c.windows[w];
+                if (!wi.through || wi.hop < 1 || wi.hop > c.span || wi.pass != 0) continue;
+                if (at >= tmp.Count || tmp[at] != wi.island) return true;
+                at++;
+            }
+            if (at != tmp.Count) return true;
+        }
+        return false;
     }
 
     /// <summary>v6: the island of column <paramref name="col"/> a pattern of <paramref name="home"/> is carried onto (see CarryTargets), null none.
@@ -3374,6 +3461,84 @@ public class SongManager : MonoBehaviour
         return at;
     }
 
+    // ------------------------------------------------------------------ Flow (F2, SPEC flow §2): the lane a drawn melody walks on
+    /// <summary>Flow (F2): the grid of column <paramref name="col"/> standing in the lane of a platform (its front edge and depth) of one family
+    /// (<paramref name="keyboard"/>: keyboards, else chord islands) — the largest front-back overlap, at least MergeOverlap of the shallower
+    /// (LaneMates). Unlike <see cref="LaneNext"/> it crosses section boundaries: it is where a melody that ran out of its section goes on as a new
+    /// path. Null none.</summary>
+    public KeyBlock LaneGridIn(int col, float frontEdge, float depth, bool keyboard)
+    {
+        if (col < 0 || col >= colFirst.Count) return null;
+        KeyBlock best = null; float bo = 0f; int fam = keyboard ? 1 : 0;
+        for (int k = colFirst[col]; k < colFirst[col] + colCount[col]; k++)
+        {
+            var o = k >= 0 && k < Islands.Count ? Islands[k] : null;
+            if (o == null || LaneFamily(o) != fam) continue;
+            float ov;
+            if (!LaneMates(frontEdge, depth, o.FrontEdge, o.Depth, out ov)) continue;
+            if (best == null || ov > bo + 1e-4f) { best = o; bo = ov; }
+        }
+        return best;
+    }
+
+    /// <summary>Flow (F2): an EMPTY grid for a drawn melody to walk onto — in column <paramref name="col"/>, in the lane of <paramref name="like"/>
+    /// (its root z): a chord grid of that column's chord, or for a keyboard a keyboard with the same keys (the same key is the same pitch on both).
+    /// As long as its column (a shorter grid in a longer column would leave the melody silent in the measures it does not cover). Seek-keeping
+    /// rebuild + History.Push (the caller folds it into its gesture); it rises from the sea. Returns its index (-1: the column is full, no such
+    /// column, a Moon / stairs / phrase).</summary>
+    public int AddLaneGrid(KeyBlock like, int col)
+    {
+        if (!HasSong || like == null || col < 0 || col >= ColumnCount || LaneFamily(like) < 0 || LaneCount(col) >= ProjectConfig.MaxLanes) return -1;
+        var ms = LaneState(like, ChordOfColumn(col), ColumnBars(col));
+        var st = SongState.Capture();
+        int at = PlaceStateInColumn(st, ms, col, null);
+        if (at < 0) return -1;
+        History.Push();
+        if (at < Islands.Count && Islands[at] != null) Islands[at].RiseIn();
+        return at;
+    }
+
+    /// <summary>Flow (F2): a new LAST column for a melody that ran past the song's end — one measure of the last column's chord standing in the
+    /// lane of <paramref name="like"/> (its root z); for a keyboard lane the chord grid stands where the last column's chord stands and a keyboard
+    /// joins it in the lane. Rebuilds + History.Push like <see cref="AddLaneGrid"/> (one or two entries: the caller folds them). Returns the index
+    /// of the lane's grid in the new column (-1 none).</summary>
+    public int AppendLaneColumn(KeyBlock like)
+    {
+        if (!HasSong || like == null || LaneFamily(like) < 0) return -1;
+        int nc = ColumnCount;
+        var ch = ChordOfColumn(nc - 1);
+        bool keys = like.IsKeyboard;
+        var kms = keys ? LaneState(like, ch, 1) : null;   // (like is gone after the rebuild: its lane is read now)
+        var ms = LaneState(keys ? null : like, ch, 1);
+        if (keys) ms.pz = ch != null ? ch.pz : like.pz;
+        var st = SongState.Capture();
+        int at = PlaceStateAsColumn(st, ms, nc, null);
+        History.Push();
+        if (at >= 0 && at < Islands.Count && Islands[at] != null) Islands[at].RiseIn();
+        if (!keys || at < 0) return at;
+        st = SongState.Capture();
+        int kat = PlaceStateInColumn(st, kms, ColumnCount - 1, null);
+        if (kat < 0) return -1;
+        History.Push();
+        if (kat < Islands.Count && Islands[kat] != null) Islands[kat].RiseIn();
+        return kat;
+    }
+
+    /// <summary>The state of an empty lane grid: a keyboard like <paramref name="like"/> (its lowest key and key count), else a chord grid of
+    /// <paramref name="chord"/> (the key's home chord without one); <paramref name="bars"/> long, at like's root z.</summary>
+    static MeasureState LaneState(KeyBlock like, KeyBlock chord, int bars)
+    {
+        MeasureState ms;
+        if (like != null && like.IsKeyboard) { ms = MeasureState.From(KeyboardMeasure(1)); ms.root = like.chordRootMIDI; ms.keyCount = like.keyCount; }
+        else
+        {
+            var d = chord != null ? chord.ToData() : MusicTheory.Diatonic(MusicTheory.KeyOfSong(), 0);
+            ms = new MeasureState { chordKey = d.chordKey, root = d.chordRootMIDI, semis = (int[])(d.semitones ?? new[] { 0, 4, 7 }).Clone(), kind = 0, energy = 2, repeat = 1 };
+        }
+        ms.bars = Mathf.Clamp(bars, 1, 4); ms.pz = like != null ? like.pz : (chord != null ? chord.pz : 0f); ms.placed = true; ms.group = 0;
+        return ms;
+    }
+
     /// <summary>
     /// Duplicate: a copy of <paramref name="island"/> (chord, register, section controls and its cubes with new ids, same lengths / stickers):
     /// <paramref name="where"/> 0 = right (a new column inserted right after the glued run of its column, the copy in its lane: the song gets
@@ -3749,7 +3914,7 @@ public class SongManager : MonoBehaviour
 
     void AfterLiveLayout()
     {
-        if (LongGridsMoved()) RecomputeMeasureStarts();   // v7 §21: a grid moved into / out of a lane: the carried windows and the joined look follow
+        if (LongGridsMoved() || SpanChainsMoved()) RecomputeMeasureStarts();   // v7 §21: a grid moved into / out of a lane: the carried windows and the joined look follow (F1: a span's chain too)
         RefreshGroupLook();
         if (Route != null) Route.Rebuild();
         LayoutMoons(true);   // v6 §11.3

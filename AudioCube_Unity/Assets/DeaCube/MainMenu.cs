@@ -362,7 +362,7 @@ public class MainMenu : MonoBehaviour
         if (CubeInspector.IsOpen) CubeInspector.CloseImmediate();
         if (IslandTray.IsOpen) IslandTray.Close();
         if (Presenter.Active) Presenter.Exit();
-        if (PathManager.I != null && PathManager.I.IsDrawing) PathManager.I.CancelPath();
+        if (PathManager.I != null && PathManager.I.IsDrawing) { if (PathManager.FlowOn) PathManager.I.FinishPath(); else PathManager.I.CancelPath(); }   // Flow: every exit keeps the notes
         if (UIManager.I != null) { UIManager.I.CloseRings(); UIManager.I.SetHudVisible(false); }
         WorldInput.Lock("menu", true);
         if (OrbitCamera.I != null && !OrbitCamera.I.Suspended) { OrbitCamera.I.Suspended = true; suspendedByMenu = true; }

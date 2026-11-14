@@ -398,18 +398,21 @@ public static class V7ChecksU2
         var c = PitchedCube(x => x.Island.cols >= 4 && x.nodes.Count >= 3 && InspectorCard.NextGridOf(x) != null);
         if (c == null) { Line(false, "card", "no pitched cube"); yield break; }
         yield return OpenCard(c);
-        int face = InspectorCard.FaceTargetCount();
+        // Flow E1 (2026-11-13, "BE SIMPLE AND MINIMALISTIC"): the cube ideas left the face — they are icons of the ⋯ drawer (its "copies" group)
+        int face = InspectorCard.FaceTargetCount(); bool restOff = !InspectorCard.IdeasShown;
+        InspectorCard.MoreTab.Click();
+        yield return WaitFor(() => InspectorCard.DrawerShown >= 1f, 1.5f); yield return Wait(0.3f);
         var ideas = new List<InkButton> { InspectorCard.OctaveCopyButton(1), InspectorCard.OctaveCopyButton(-1), InspectorCard.HarmonyButton(true), InspectorCard.HarmonyButton(false), InspectorCard.FlipButton };
         string det;
         bool reach = Reachable(ideas, out det);
-        Line(InspectorCard.IdeasShown && face <= 20 && reach, "the card's ideas row: octave copy ↑ / ↓, harmony ↑ / ↓, flip — a real click reaches each; the face stays ≤ 20 targets",
+        Line(restOff && InspectorCard.IdeasShown && face <= 20 && reach, "the cube ideas — octave copy ↑ / ↓, harmony ↑ / ↓, flip — are icons of the card's ⋯ drawer (not on the face at rest); the drawer out, a real click reaches each; the face stays ≤ 20 targets",
              face + " face targets; " + det);
-        // a selected note: the length row takes the slot
+        // a selected note: the size row (always on the card) is that note's; deselected it is the next note's size again
         var strip = InspectorCard.Strip;
         strip.SelectEvent(0, true); yield return null; yield return null;
-        int face2 = InspectorCard.FaceTargetCount(); bool away = !InspectorCard.IdeasShown && DurationPicker.IsShown;
+        int face2 = InspectorCard.FaceTargetCount(); bool away = DurationPicker.IsShown && DurationPicker.Mode == DurationPicker.Where.Inspector && DurationPicker.TargetNode == strip.SelectedNote;
         strip.Deselect(); yield return null; yield return null;
-        Line(away && face2 <= 22 && InspectorCard.IdeasShown, "a selected note's length row takes the ideas' slot (face ≤ 22 with v9's higher / lower); deselected, the ideas are back", "face " + face2);
+        Line(away && face2 <= 22 && DurationPicker.IsShown && DurationPicker.TargetNode < 0 && InspectorCard.IdeasShown, "a selected note takes the size row over (face ≤ 22 with v9's higher / lower and the scissors); deselected, the row is the next note's size again (the drawer stays out)", "face " + face2);
         InspectorCard.OctaveCopyButton(1).SimHover(true); yield return Wait(0.2f);
         yield return Shot("u2_7_card_ideas.png");
         InspectorCard.OctaveCopyButton(1).SimHover(false);
@@ -454,7 +457,7 @@ public static class V7ChecksU2
         bool back = c.nodes.Count == before.Count; for (int i = 0; back && i < c.nodes.Count; i++) back = c.nodes[i].gridX == before[i].x && c.nodes[i].gridZ == before[i].y;
         Line(changed && back && p1 == 1 && pushes - p0 == 2, "flip: the path upside down (one History entry); flipped again it is back", "changed " + changed + ", back " + back + ", pushes " + p1 + " / " + (pushes - p0));
         // v7 §21 ("just keep cubes on each grid"): the more drawer has no rider card any more, and R (the v3 rider key) does nothing
-        InspectorCard.MoreTab.Click();
+        if (!InspectorCard.DrawerOpen) InspectorCard.MoreTab.Click();   // (Flow E1: the drawer is out since the ideas check)
         yield return WaitFor(() => InspectorCard.DrawerShown >= 1f, 1.5f); yield return Wait(0.3f);
         int namedRider = 0; foreach (var b in InspectorCard.Root.GetComponentsInChildren<InkButton>(true)) if (b.name == "Rider") namedRider++;
         var drawerCards = new List<InkButton> { InspectorCard.DrawerButton("twin"), InspectorCard.DrawerButton("shadow"), InspectorCard.DrawerButton("echo"), InspectorCard.DrawerButton("stamp"), InspectorCard.DrawerButton("up") };
@@ -625,10 +628,16 @@ public static class V7ChecksU2
         var br = ScreenRect(bar.Root); var sr = bar.SelectionScreenRect;
         bool over = bar.PlacedBelow ? br.yMax < sr.yMin + 4f : br.yMin > sr.yMax - 4f;
         bool centred = br.xMax > sr.xMin && br.xMin < sr.xMax;
-        var bs = new List<InkButton>(); foreach (HudSelection.Act a in Enum.GetValues(typeof(HudSelection.Act))) bs.Add(bar.Button(a));
+        // Flow E2 (a quiet world): the bar draws FOUR — copy, paste, repeat, the trash can; the other six keep their actions (keys, the islands' ⋯ cards)
+        var bs = new List<InkButton>(); int hidden = 0;
+        foreach (HudSelection.Act a in Enum.GetValues(typeof(HudSelection.Act)))
+        {
+            if (HudSelection.IsDrawn(a)) bs.Add(bar.Button(a));
+            else if (bar.Button(a) != null && !bar.Button(a).gameObject.activeInHierarchy) hidden++;
+        }
         string det;
         bool reach = Reachable(bs, out det);
-        Line(bar.Shown && over && centred && reach, "a selection: the bar floats over the selected grids (" + (bar.PlacedBelow ? "below" : "above") + " them, overlapping them in x); nine icon buttons, reachable", det + ", bar " + br + ", selection " + sr);
+        Line(bar.Shown && over && centred && reach && bs.Count == 4 && hidden == 6, "a selection: the bar floats over the selected grids (" + (bar.PlacedBelow ? "below" : "above") + " them, overlapping them in x); four icon buttons (Flow E2: copy, paste, repeat, the trash can — the other six are not drawn), reachable", det + ", not drawn " + hidden + ", bar " + br + ", selection " + sr);
         yield return Shot("u2_7_selection_bar.png");
         // copy (no song change), then paste after the selection
         int p0 = pushes, a0 = HudSelection.ActionCount, cols0 = sm.ColumnCount, isl0 = sm.Islands.Count;

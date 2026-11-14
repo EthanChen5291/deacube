@@ -64,6 +64,20 @@ using UnityEngine;
 /// v7 §21 (the user: "the cubes jumping form grid to grid doesnt look good - scrap that actually just keep cubes on each grid"): nothing the hand
 /// does flies a cube across grids any more — a stamped cube APPEARS on its target grid (W's Magic.Appear: a pop + sparkle there). Keys clicked
 /// into a keyboard draft raise <see cref="OnDraftKey"/> (the keyboard's cat plays the notes being placed).
+/// FLOW (2026-11-13, SPEC flow §2; the user: "unconstrained melodical idea that's fluid but also aligned to musical grid" / "if i have like an 8
+/// note melody with a specific rhythm then i have to manually make a grid then extend it"): with <see cref="Flow"/> (the game's default; the
+/// older suites switch it off to keep testing the v7 rules above, and <see cref="AutoHand"/> keeps its own) NOTE ENTRY NEVER HITS A WALL. A
+/// note that does not fit the draft's capacity makes room by itself: R1 the cube's SPAN grows onto the next grid of its lane (F1's engine: one
+/// cube, one path, walking on through the touching grids of its section; a lane with no grid in the next column gets an empty one), R2 at the
+/// section's last column the grid grows a measure while the section has room, R3 else the cube is finished and a NEW draft starts by itself on
+/// the lane's grid of the next column (a column is appended at the song's end) — never "capacity reached", never the expand chip. A note is
+/// placed on the grid that holds its START beat: a click (or the hover ghost) on a tile of another grid of the chain is mirrored to the same
+/// (x, z) there. R or the draft row's hollow cube adds a REST of the brush size; the same tile again is the note again on every surface;
+/// a drag paints notes and its release never finishes. The pen goes up with a right-click, Enter, the ✓, Esc, a click on the sea or on a grid
+/// outside the chain — and EVERY exit keeps the notes (Backspace / Cmd+Z take them back; a draft without a note leaves nothing); the whole run
+/// from pen down to pen up is ONE undo entry. Drawing does not pause a playing song: the transport loops the columns the draft covers and goes
+/// back to what it was when the pen goes up. RESUME: with a cube in the hand a click on the last bead of a finished path of that group picks
+/// the path up again (<see cref="Resume"/>). No words: the grids' beat pips carry the fill.
 /// </summary>
 public class PathManager : MonoBehaviour
 {
@@ -243,7 +257,7 @@ public class PathManager : MonoBehaviour
     public void RemoveLastNode()
     {
         if (!IsDrawing) return;
-        if (currentPathTiles.Count <= 1 || activeCube == null) { CancelPath(); return; }
+        if (currentPathTiles.Count <= 1 || activeCube == null) { if (FlowOn) BackOut(true); else CancelPath(); return; }
         currentPathTiles.RemoveAt(currentPathTiles.Count - 1);
         var d = DraftDurs();
         while (d.Count > currentPathTiles.Count) d.RemoveAt(d.Count - 1);
@@ -252,7 +266,8 @@ public class PathManager : MonoBehaviour
         UpdateHighlights();
         previewTo = null;
         AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 0.8f);
-        AutoUnexpand();   // v7 §19.1: the grid gives back what auto-expand added
+        if (FlowOn) FlowUnexpand();   // Flow: the measure R2 added, the span R1 raised and a grid the draft made go back
+        else AutoUnexpand();          // v7 §19.1: the grid gives back what auto-expand added
         RaiseDraft(1, activeCube);
     }
     /// <summary>The pointer is over an island's platform margin (not a tile, cube or hub): the island's move handle.</summary>
@@ -300,7 +315,9 @@ public class PathManager : MonoBehaviour
     void UpdateDraftHover(TileInteraction tile, bool stroking)
     {
         var last = Last;
-        bool valid = IsDrawing && activeCube != null && tile != null && last != null && tile.island == last.island && (tile != last || Keys(tile.island)) && !stroking;
+        bool flow = FlowOn && IsDrawing;
+        if (flow) tile = FlowTarget(tile);   // Flow: the ghost stands where the note will sound (the hovered (x, z) on the grid that holds the next note's start)
+        bool valid = IsDrawing && activeCube != null && tile != null && last != null && (flow || (tile.island == last.island && (tile != last || Keys(tile.island)))) && !stroking;
         if (!valid) { HideDraftPreview(); if (activeCube != null) activeCube.Peek(null); return; }
         if (tile != previewTo || last != previewFrom || activeCube.instrument != previewInst) BuildDraftPreview(last, tile);
         AnimateDraftPreview();
@@ -363,7 +380,8 @@ public class PathManager : MonoBehaviour
         if (IsDrawing)
         {
             var last = Last;
-            if (activeCube != null && tile != null && last != null && tile.island == last.island && (tile != last || Keys(tile.island)) && !(p.held && dragging)) want = tile;
+            if (FlowOn) { if (activeCube != null && last != null && !(p.held && dragging)) want = FlowTarget(tile); }   // Flow: the tile the note lands on (mirrored onto the chain)
+            else if (activeCube != null && tile != null && last != null && tile.island == last.island && (tile != last || Keys(tile.island)) && !(p.held && dragging)) want = tile;
         }
         else if (tile != null && tile.island != null && r.rule == 4 && !dragged && Hand != HandKind.Pattern) want = tile;   // v6: a held pattern shows its ghost, silent
         if (want != hoverAud)
@@ -395,7 +413,8 @@ public class PathManager : MonoBehaviour
         lastAudTiles.Clear();
         if (IsDrawing && activeCube != null)
         {
-            if (Leaps(t)) { runScratch.Clear(); runScratch.Add(t); }   // v6: a keyboard (SPHERE: a ball) auditions the single tile a click adds
+            if (FlowOn) FlowRun(t, runScratch);                             // Flow: exactly the tiles a click adds (a run may step onto the next grid)
+            else if (Leaps(t)) { runScratch.Clear(); runScratch.Add(t); }   // v6: a keyboard (SPHERE: a ball) auditions the single tile a click adds
             else LineTiles(Last, t, runScratch);
             if (runScratch.Count == 0) runScratch.Add(t);
             lastAudTiles.AddRange(runScratch);
@@ -460,7 +479,8 @@ public class PathManager : MonoBehaviour
     void BuildDraftPreview(TileInteraction from, TileInteraction to)
     {
         previewFrom = from; previewTo = to; previewInst = activeCube.instrument;
-        if (Leaps(to)) { previewTiles.Clear(); previewTiles.Add(to); }   // v6: a keyboard click adds exactly the hovered key (a repeat when it is the last); SPHERE: the leap's tile
+        if (FlowOn) FlowRun(to, previewTiles);                                // Flow: exactly the tiles a click adds
+        else if (Leaps(to)) { previewTiles.Clear(); previewTiles.Add(to); }   // v6: a keyboard click adds exactly the hovered key (a repeat when it is the last); SPHERE: the leap's tile
         else LineTiles(from, to, previewTiles);
         if (previewLine == null)
         {
@@ -594,6 +614,7 @@ public class PathManager : MonoBehaviour
         RunnersPlaced = 0; MarqueeCount = 0; ShiftClicks = 0;
         CapacityRefusals = 0; AutoExpands = 0; AutoUnexpands = 0; DrawLoopToggles = 0; Expands = 0; KeyExtends = 0; KeyShrinks = 0;
         Appears = 0; OnDraftKey = null; DraftKeyEvents = 0;   // v7 §21, C
+        Flow = true; FlowSpans = 0; FlowUnspans = 0; FlowGrids = 0; FlowGridsBack = 0; FlowHandovers = 0; FlowRests = 0; FlowResumes = 0; FlowMirrors = 0; FlowFrames = 0;
     }
 
     void Awake()
@@ -617,6 +638,7 @@ public class PathManager : MonoBehaviour
         FocusLoop.Tick();
         if (drawLoop && !FocusLoop.Active) drawLoop = false;   // v7: the draw loop went (dismissed elsewhere)
         FireRunFlashes();
+        TickFlow();   // Flow: the mirror arc fades, the "+" badges by the paths that can be picked up again
         UpdatePendingShow();
         if (pendingFit != null) { var f = pendingFit; pendingFit = null; if (f.isFinalized && !IsDrawing) FitColumnToCube(f); }
         if (cam == null) cam = Camera.main;
@@ -660,6 +682,7 @@ public class PathManager : MonoBehaviour
             return;
         }
         if (frame && !WorldInput.KeysLocked) HandleHotkeys();
+        if (IsDrawing && FlowOn) EnsureReach();   // Flow: the draft's grids (its chain and where the next note goes)
         if (frame) UpdateFill();   // v7 §19.1: the grid's pips show the draft's fill
 
         // an island drag (or its push-out slide) owns the pointer: no picking, hover or tile clicks meanwhile (SPEC §2.2)
@@ -697,7 +720,15 @@ public class PathManager : MonoBehaviour
         UpdatePatternGhost(p, r);                                          // v6: the held pattern's adapted ghost on the hovered grid
         // dragging across tiles extends the path; tiles a fast drag skipped are filled along the grid line (SPEC v3 §2.6); F5: only when
         // the pointer itself moved since the press / last extension (a view still gliding under a still pointer draws nothing)
-        if (p.held && dragging && IsDrawing && r.tile != null && r.tile != Last && (p.pos - extendPx).sqrMagnitude >= 1f && ExtendTo(r.tile)) { strokeExtended = true; extendPx = p.pos; }
+        if (p.held && dragging && IsDrawing && r.tile != null)
+        {
+            if (FlowOn)
+            {
+                // Flow: a drag PAINTS notes — only after real pointer travel (DragPaintPx) AND onto another tile (a slip during a click adds nothing)
+                if (r.tile != dragTile && (p.pos - extendPx).magnitude >= DragPaintPx * OrbitCamera.DpiScale && InReach(r.tile.island)) { dragTile = r.tile; extendPx = p.pos; strokeExtended = true; FlowClick(r.tile); }
+            }
+            else if (r.tile != Last && (p.pos - extendPx).sqrMagnitude >= 1f && ExtendTo(r.tile)) { strokeExtended = true; extendPx = p.pos; }
+        }
         // v7 (§14.4): a phrase stroke paints on — a note in each cell reached after its last note's end, another row inside the newest note moves it
         if (p.held && strokeIsland >= 0 && !p.overUI && r.tile != null && (p.pos - strokePx).sqrMagnitude >= 1f) { strokePx = p.pos; StrokeAt(r.tile, false); }
         UpdateDraftHover(p.overUI ? null : r.tile, p.held && dragging);   // v4 R3: the ghost of what a click adds (v5: + the hologram's peek)
@@ -707,8 +738,9 @@ public class PathManager : MonoBehaviour
             if (strokeIsland >= 0) EndPhraseStroke();   // v7: the whole phrase stroke is ONE History entry
             // only a drag stroke finishes the path on release; plain clicks keep drawing (click tile by tile, then click the end tile, Enter or right-click);
             // v6: a keyboard's glissando stroke does not finish its melody (Enter, a right-click, a click off the island or the done tick do)
-            if (dragging && IsDrawing && strokeExtended && currentPathTiles.Count >= 2 && !Keys(Last != null ? Last.island : null)) FinishPath();
-            dragging = false; strokeExtended = false;
+            // Flow: a release never finishes (the drag painted notes; the pen stays down)
+            if (dragging && IsDrawing && strokeExtended && currentPathTiles.Count >= 2 && !FlowOn && !Keys(Last != null ? Last.island : null)) FinishPath();
+            dragging = false; strokeExtended = false; dragTile = null;
             // a press on the candidate cube opens the inspector when released in place; a drag that started on a cube does nothing
             if (pressCube != null)
             {
@@ -977,7 +1009,26 @@ public class PathManager : MonoBehaviour
     {
         Vector3 px = pin.pos;
         var tile = r.tile;
-        if (IsDrawing)
+        if (IsDrawing && FlowOn)
+        {
+            // Flow: a tile of the draft's grids adds a note (the same tile again = the note again; a far tile of the same grid fills the line; the
+            // note lands on the grid that holds its start); their margins do nothing; anything else is PEN UP — the notes stay — and the press
+            // then acts as a press there (a cube in the hand starts the next path at once)
+            EnsureReach();
+            if (tile != null && InReach(tile.island))
+            {
+                dragTile = tile; extendPx = px; strokeExtended = false;
+                FlowClick(tile);
+                dragging = IsDrawing;
+                return;
+            }
+            if (tile == null && r.island != null && InReach(r.island)) return;
+            FinishPath();
+            r = PickAt(px, pin.alt); tile = r.tile;   // (the draft's pick ignored cubes)
+            SetHover(r.tile, r.cube); SetCandidate(r.cube);
+            hoverIsland = r.island; hoverIsHub = r.onHub;
+        }
+        else if (IsDrawing)
         {
             if (tile != null && Last != null && tile.island == Last.island && Keys(tile.island))
             {
@@ -1031,8 +1082,12 @@ public class PathManager : MonoBehaviour
             if ((Hand == HandKind.Cube || AutoHand) && tile.island != null && tile.island.IsPhrase) { BeginPhraseStroke(tile, px); return; }
             if (Hand == HandKind.Cube || AutoHand)
             {
-                StartPath(tile);   // a free tile, or Alt + a tile that carries a cube (the new cube stacks on top)
-                dragging = true; strokeExtended = false; extendPx = px;
+                // Flow RESUME: the last bead of a finished path of the held group = the pen goes down again at its end (Alt + click still stacks a new path)
+                var again = FlowOn && r.rule == 4 ? ResumableAt(tile) : null;
+                if (again != null && Resume(again)) { tile.Press(0.4f); tile.Flash(again.Color, 0.7f); }
+                else if (FlowOn) FlowStart(tile);   // (+ the rests asked for before the first note)
+                else StartPath(tile);               // a free tile, or Alt + a tile that carries a cube (the new cube stacks on top)
+                dragging = IsDrawing; strokeExtended = false; extendPx = px; dragTile = tile;
                 return;
             }
             // v6: the EMPTY hand presses the tile (its note, loud, at once); a drag from it moves the island, Alt + drag plays across the tiles
@@ -1072,10 +1127,14 @@ public class PathManager : MonoBehaviour
 
     internal void RaiseHubClicked(KeyBlock kb) { if (kb != null) OnHubClicked?.Invoke(kb); }
 
-    void StartPath(TileInteraction tile)
+    void StartPath(TileInteraction tile) { StartPath(tile, false, brushTicks); }
+
+    /// <param name="rest">Flow: the path opens with a REST of <paramref name="ticks"/> standing on <paramref name="tile"/> (a pickup rest).</param>
+    void StartPath(TileInteraction tile, bool rest, int ticks)
     {
-        // v7 §19.1: the first note must fit the grid too (auto-expanded when its section has room; else refused: nothing starts)
-        if (!AutoHand && tile.island != null && !GridRoom(tile.island, brushTicks / (float)ProjectConfig.TicksPerBeat, 0f)) return;
+        bool flow = FlowOn;
+        // v7 §19.1: the first note must fit the grid too (auto-expanded when its section has room; else refused: nothing starts); Flow: FlowRoom below
+        if (!flow && !AutoHand && tile.island != null && !GridRoom(tile.island, brushTicks / (float)ProjectConfig.TicksPerBeat, 0f)) return;
         EndPhraseSession();
         Deselect();
         bool onMoon = tile.island != null && tile.island.IsMoon;
@@ -1092,7 +1151,8 @@ public class PathManager : MonoBehaviour
         currentPathTiles.Clear();
         currentPathTiles.Add(tile);
         activeCube.SetPath(currentPathTiles);
-        activeCube.SetAllDurations(new[] { BrushTicks });           // node 0 gets the brush length: the draft runs the durations engine
+        activeCube.SetAllDurations(new[] { flow ? AudioCube.ClampTicks(ticks) : BrushTicks });   // node 0 gets the brush length: the draft runs the durations engine
+        if (rest) activeCube.SetMod(0, 1);
         activeCube.Materialize();                                   // it beams in where it stands (no drop: it plays at once)
         MelodyLine.Ensure();                                        // v5: the draft's melody line
         currentState = EditorState.DrawingPath; isSettingPath = true;
@@ -1100,19 +1160,28 @@ public class PathManager : MonoBehaviour
         var sm = SongManager.I;
         draftCol = !onMoon && tile.island != null ? tile.island.column : -1;
         draftFloor = draftCol >= 0 && sm != null ? sm.ColumnBars(draftCol) : -1;
-        drawLoop = false; CapacityReached = false;
+        if (!(flow && runMark >= 0)) drawLoop = false;   // (Flow: a draft the run hands the melody over to keeps the run's loop)
+        CapacityReached = false;
         if (AutoHand) { if (sm != null) FocusLoop.Begin(onMoon ? sm.LitColumn : tile.island.column); }   // v4 R4 (the pre-v6 suites): its column loops while it is drawn
+        else if (flow) { RefreshReach(); if (runMark < 0) { BeginRun(false); FlowTransportStart(); } }   // Flow: a playing song plays on, looping the draft's columns
         else QuietStart();   // v7 §19.2: no loop by itself; a playing song pauses
         bool loopRestarted = GlobalClock.IsPlaying && GlobalClock.HasRegion && Math.Abs(GlobalClock.SongBeatD - GlobalClock.RegionStart) < 1e-6;
-        if (!loopRestarted) tile.PlayPreview(inst, 0, activeCube.voice);
+        if (rest) AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 1.1f);
+        else if (!loopRestarted) tile.PlayPreview(inst, 0, activeCube.voice);
         else { tile.Press(); tile.Flash(Instruments.Colors[Mathf.Clamp(inst, 0, Instruments.Count - 1)], 0.9f); }   // the loop (re)starts on this column: the draft plays node 0 itself
-        RaiseDraftKey(tile);   // v7 (C): the cat plays the first key too
+        if (!rest) RaiseDraftKey(tile);   // v7 (C): the cat plays the first key too
         UpdateHighlights();
         // no camera focus on a draw (SPEC §2.6): the leash follows the comet, nothing cuts
         RaiseDraft(0, activeCube);
         Onboarding.Notify(Onboarding.Ev.PathStarted);
         keyExtLow = 0; keyExtHigh = 0;
-        MaybeExtendKeys(tile);   // v7 §20.1: a melody starting on an edge key gets room that way
+        if (!rest) MaybeExtendKeys(tile);   // v7 §20.1: a melody starting on an edge key gets room that way
+        if (flow)
+        {
+            if (rest) FlowRests++;
+            FlowRoom(0f);   // the first event fits too (a whole note on a three-beat grid)
+            RefreshReach(); UpdateHighlights(); SyncDrawLoop(false);
+        }
     }
 
     AudioCube SpawnCube(int instrument)
@@ -1159,17 +1228,24 @@ public class PathManager : MonoBehaviour
 
     /// <summary>Finishes the draft: it solidifies (v4 R3: glitch, the split converges, a white flash, the solid cube + ink burst + pop), the
     /// timeline is recomputed and History gets ONE entry. The focus loop stays until dismissed.</summary>
-    public void FinishPath()
+    public void FinishPath() { FinishPath(true); }
+
+    /// <param name="penUp">false: Flow hands the melody over to a new draft (R3) — the run (its one undo entry, the transport) goes on.</param>
+    void FinishPath(bool penUp)
     {
         if (!IsDrawing) return;
-        GiveBackKeys(false);   // v7 §20.1: octaves the draft added that hold no notes go back (before the draft lets go of its tiles)
+        bool flow = FlowOn;
+        if (flow && !HasNote(activeCube)) { BackOut(false); return; }   // Flow: a draft that never got a note (only rests) leaves nothing
+        bool gave = GiveBackKeys(false);   // v7 §20.1: octaves the draft added that hold no notes go back (before the draft lets go of its tiles)
         var c = activeCube;
+        if (gave && c != null && c.span > 0) c.SetPathAndMods(currentPathTiles, DraftMods(), DraftDurs());   // re-indexed keys: a span cube's cells follow
         var fillIsland = Last != null ? Last.island : null;
         activeCube = null;
         currentState = EditorState.Idle; isSettingPath = false;
         ClearHighlights(); HideDraftPreview(); ResetHoverAudition();
         currentPathTiles.Clear();
-        ClearFill(fillIsland); CapacityReached = false; draftCol = -1;   // v7 §19.1 (the grid keeps its size: the finish's History entry has it)
+        ClearFill(fillIsland); ClearFlowFill(); CapacityReached = false; draftCol = -1;   // v7 §19.1 (the grid keeps its size: the finish's History entry has it)
+        reach.Clear(); reachNext = null; reachSig = int.MinValue;
         if (c != null)
         {
             c.Peek(null);
@@ -1179,8 +1255,9 @@ public class PathManager : MonoBehaviour
             History.Push();   // v3: a finished path does not select its cube, so the next path is one click away (click the cube to inspect it)
             RaiseDraft(2, c);
             Onboarding.Notify(Onboarding.Ev.PathFinished);
-            pendingFit = c;   // next frame: the finish frame already serialised a snapshot; a rebuild on top of it can starve the audio lookahead
+            if (!flow) pendingFit = c;   // next frame: the finish frame already serialised a snapshot; a rebuild on top of it can starve the audio lookahead (Flow: the pattern always fits its chain)
         }
+        if (flow && penUp) EndRun();   // Flow: the whole run is ONE undo entry; the transport goes back to what it was
     }
 
     AudioCube pendingFit;
@@ -1216,7 +1293,8 @@ public class PathManager : MonoBehaviour
         currentState = EditorState.Idle; isSettingPath = false;
         ClearHighlights(); HideDraftPreview(); ResetHoverAudition();
         currentPathTiles.Clear();
-        ClearFill(fillIsland); CapacityReached = false;
+        ClearFill(fillIsland); ClearFlowFill(); CapacityReached = false;
+        reach.Clear(); reachNext = null; reachSig = int.MinValue;
         // v7 §19.1: a dropped draft gives back the measures auto-expand added for it (an explicit EXPAND stays: it is in History)
         var smc = SongManager.I;
         if (animate && !AutoHand && smc != null && draftCol >= 0 && draftCol < smc.ColumnCount && draftFloor > 0 && smc.ColumnBars(draftCol) > draftFloor && smc.ResizeColumnLive(draftCol, draftFloor)) AutoUnexpands++;
@@ -1228,6 +1306,7 @@ public class PathManager : MonoBehaviour
             else { SequenceMaster.Unregister(c); c.Delete(false); }
         }
         RaiseDraft(2, null);
+        if (runMark >= 0 && !runHold) AbandonRun(animate);   // Flow: a draft dropped from outside (a song rebuild) ends its run where it stands
     }
 
     /// <summary>S2: Cmd+Z while drawing takes back the draft's last node (the last one left: the draft is cancelled). No History entry:
@@ -1247,8 +1326,19 @@ public class PathManager : MonoBehaviour
     void UpdateHighlights()
     {
         var last = Last; if (last == null) return;
-        bool keys = Leaps(last);   // v6: on a keyboard every key is one click away (no candidate ring); SPHERE: every tile is
-        foreach (var t in last.island.tiles)
+        if (FlowOn && reach.Count > 0)
+        {
+            // Flow: the path's tiles on every grid of the chain; the one-step ring only where the next note goes on the last note's grid
+            ClearHighlights();
+            for (int i = 0; i < reach.Count; i++) if (reach[i] != null) HighlightGrid(reach[i], last, Leaps(last) || reach[i] != last.island || reachNext != last.island);
+            return;
+        }
+        HighlightGrid(last.island, last, Leaps(last));   // v6: on a keyboard every key is one click away (no candidate ring); SPHERE: every tile is
+    }
+
+    void HighlightGrid(KeyBlock kb, TileInteraction last, bool keys)
+    {
+        foreach (var t in kb.tiles)
         {
             int idx = currentPathTiles.IndexOf(t);
             if (idx == 0) t.SetHighlight(TileInteraction.Highlight.Start);
@@ -1346,6 +1436,7 @@ public class PathManager : MonoBehaviour
         if (voice >= 0) Instruments.BrushVoice[instrument] = Mathf.Clamp(voice, 0, Mathf.Max(0, Instruments.VoiceCount(instrument) - 1));
         SelectInstrument(instrument);
         if (activeCube != null && !activeCube.IsOnMoon) activeCube.SetVoice(Instruments.BrushVoiceOf(instrument));
+        if (Hand != HandKind.Cube) pendingRests.Clear();
         Hand = HandKind.Cube;
         HidePatternGhost(); armKind = ArmKind.None;
         OnHandChanged?.Invoke();
@@ -1360,7 +1451,7 @@ public class PathManager : MonoBehaviour
     {
         if (!Clipboard.HasPattern) return false;
         if (IsDrawing) FinishPath();
-        PatternMode = mode;
+        PatternMode = mode; pendingRests.Clear();
         Hand = HandKind.Pattern;
         HideHandGhost(); patternKey = int.MinValue; armKind = ArmKind.None;
         OnHandChanged?.Invoke();
@@ -1372,6 +1463,7 @@ public class PathManager : MonoBehaviour
         if (Hand == HandKind.Empty) return;
         if (IsDrawing) FinishPath();
         EndPhraseSession();
+        pendingRests.Clear();
         Hand = HandKind.Empty;
         PatternMode = Clipboard.PasteMode.Plain;
         HideHandGhost(); HidePatternGhost(); armKind = ArmKind.None;
@@ -1507,6 +1599,7 @@ public class PathManager : MonoBehaviour
         if (!p.overUI && Hand == HandKind.Cube && !shiftArmed && r.tile != null && strokeIsland < 0)
         {
             if (!IsDrawing) { if (r.rule == 4 || r.rule == 5) t = r.tile; }
+            else if (FlowOn) t = FlowTarget(r.tile);   // Flow: the next node, on the grid that holds its start
             else { var last = Last; if (last != null && r.tile.island == last.island && (r.tile != last || Keys(r.tile.island))) t = r.tile; }   // v7: the next node
         }
         if (t == null) { HideHandGhost(); return; }
@@ -1818,7 +1911,7 @@ public class PathManager : MonoBehaviour
             moon = s.moon, hits = s.hits, rot = s.rot, mask = s.mask, octave = s.octave, reverse = s.reverse, phase = s.phase, follow = s.follow,
             echo = s.echo, shimmer = s.shimmer, rider = s.rider, seed = s.seed, twinOf = s.twinOf, id = s.id, voice = s.voice,
             layer = s.layer, echoOf = s.echoOf,   // SPEC v7 §2.1
-            climb = s.climb, sphere = s.sphere,
+            climb = s.climb, sphere = s.sphere, span = s.span,
             xs = new int[kept.Count], zs = new int[kept.Count], rests = new bool[kept.Count], mods = new int[kept.Count],
             durs = s.durs != null && s.durs.Length == s.xs.Length ? new int[kept.Count] : null,
             bend = s.bend != null && s.bend.Length == s.xs.Length ? new int[kept.Count] : null
@@ -1850,7 +1943,7 @@ public class PathManager : MonoBehaviour
         }
         if (KeyShim.Down(KeyCode.Escape))
         {
-            if (IsDrawing) CancelPath();                                                          // v4 R3: the hologram dissolves (v6: the hand keeps the cube)
+            if (IsDrawing) { if (FlowOn) FinishPath(); else CancelPath(); }                       // Flow: pen up, the notes stay; v4 R3: the hologram dissolves (v6: the hand keeps the cube)
             else if (CubeInspector.IsOpen) { /* the inspector reads Esc (a ring closes first) */ }
             else if (!islandDrag.Busy)
             {
@@ -1866,11 +1959,14 @@ public class PathManager : MonoBehaviour
         {
             if (IsDrawing) RemoveLastNode();
             else if (CubeInspector.IsOpen) CubeInspector.DeleteCurrent();
+            else if (FlowOn && Hand == HandKind.Cube && pendingRests.Count > 0) { pendingRests.RemoveAt(pendingRests.Count - 1); AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 0.8f); }   // Flow: a rest asked for before the first note
             else if (DrawPhrase != null && Hand == HandKind.Cube) RemoveLastPhraseNote();   // v7 §19.1: a phrase being drawn gives back its last note (and the growth)
             else if (!GridSelection.Any) DeleteSelected();
         }
         // v7 §19.2: Space while drawing = hear it (the loop over the draft's grid / phrase on / off); SequenceMaster's play / pause skips it (OwnsSpace)
         if (OwnsSpace && !InputUtil.Cmd && KeyShim.Down(KeyCode.Space)) ToggleDrawLoop();
+        // Flow: R = a rest of the brush size (while drawing; with a cube in the hand it opens the next path)
+        if (FlowOn && !InputUtil.Cmd && !CubeInspector.IsOpen && (IsDrawing || Hand == HandKind.Cube) && KeyShim.Down(KeyCode.R)) AddRest();
         if ((IsDrawing || Hand == HandKind.Cube) && !CubeInspector.IsOpen && !InputUtil.Cmd)
         {
             // v7 (§15): the size of the NEXT node (the brush) — [ shorter, ] longer, . dotted, each auditioned; a node already placed never changes
@@ -1965,14 +2061,20 @@ public class PathManager : MonoBehaviour
     // selects the whole section, Shift + click on the empty sea clears; Esc / a plain click on the empty sea clear too. While a Shift press is live
     // currentState = Selecting (OrbitCamera arms its left pan only when Idle: Shift + drag never pans) and nothing else of the press happens. The
     // selected grids' look is W's (SelectionFx); the ops are U2's selection bar / O's SongOps.
-    bool shiftArmed, marqueeOn; Vector3 shiftPx; PickResult shiftPick; Rect marqueeRect; int marqueeSig;
-    RectTransform marqueeRt; InkPainter marqueeInk;
+    // 2026-11-13 (the user: "it shouldnt be 2d square highlight it should be 3d square so that u can choose on the 3d plane and select easier"): the
+    // marquee is a rectangle ON THE GROUND (world X / Z, between the press's and the pointer's ground points: its edges run along the columns and the
+    // lanes under any camera angle) shown as a low dashed box standing on the sea (Marquee3D); it selects the grids whose footprint it overlaps.
+    bool shiftArmed, marqueeOn; Vector3 shiftPx, shiftGround; PickResult shiftPick; Rect marqueeRect, marqueeGround; int marqueeSig;
     /// <summary>v7: a Shift + drag marquee is being drawn.</summary>
     public bool Marqueeing => shiftArmed && marqueeOn;
     /// <summary>v7: a Shift press is live (a click or a marquee until its release).</summary>
     public bool ShiftGesture => shiftArmed;
     /// <summary>v7: the marquee's screen rect (px; the last one after the release).</summary>
     public Rect MarqueeRect => marqueeRect;
+    /// <summary>The marquee's ground rectangle (x = world X, y = world Z; the last one after the release): what it selects.</summary>
+    public Rect MarqueeGround => marqueeGround;
+    /// <summary>The height the marquee's ground plane lies at (the sea's floor under the islands).</summary>
+    public const float MarqueePlaneY = 0f;
     /// <summary>v7: marquees drawn and Shift + clicks so far (tests).</summary>
     public static int MarqueeCount, ShiftClicks;
     /// <summary>Tests: while set, SimOnly frames and SimPointer presses count as Shift held.</summary>
@@ -1981,6 +2083,7 @@ public class PathManager : MonoBehaviour
     void BeginShift(PickResult r, PointerIn p)
     {
         shiftArmed = true; marqueeOn = false; shiftPx = p.pos; shiftPick = r;
+        shiftGround = GroundPoint(p.pos);
         currentState = EditorState.Selecting;
         armKind = ArmKind.None; pressCube = null; deselectArmed = false;
         HideHandGhost(); HidePatternGhost();
@@ -2004,7 +2107,9 @@ public class PathManager : MonoBehaviour
     void MarqueeTo(Vector3 pos)
     {
         marqueeRect = Rect.MinMaxRect(Mathf.Min(shiftPx.x, pos.x), Mathf.Min(shiftPx.y, pos.y), Mathf.Max(shiftPx.x, pos.x), Mathf.Max(shiftPx.y, pos.y));
-        var grids = GridsInRect(marqueeRect);
+        Vector3 g = GroundPoint(pos);
+        marqueeGround = Rect.MinMaxRect(Mathf.Min(shiftGround.x, g.x), Mathf.Min(shiftGround.z, g.z), Mathf.Max(shiftGround.x, g.x), Mathf.Max(shiftGround.z, g.z));
+        var grids = GridsOnGround(marqueeGround);
         int sig = 17;
         unchecked { foreach (var kb in grids) sig = sig * 31 + kb.GetInstanceID(); sig = sig * 31 + grids.Count; }
         if (sig != marqueeSig) { marqueeSig = sig; GridSelection.Set(grids); }   // live: the grids light up as the rectangle reaches them (W's look)
@@ -2108,34 +2213,58 @@ public class PathManager : MonoBehaviour
 
     void ShowMarquee(bool on)
     {
-        if (!on) { if (marqueeRt != null && marqueeRt.gameObject.activeSelf) marqueeRt.gameObject.SetActive(false); return; }
-        if (marqueeRt == null)
-        {
-            marqueeRt = InkUI.Node("Marquee", InkUI.OverlayRoot);
-            InkUI.Stretch(marqueeRt);
-            marqueeInk = InkPainter.Create(marqueeRt, "Dashes", Vector2.zero, PaintMarquee);
-            InkUI.Stretch(marqueeInk.rectTransform);
-            marqueeInk.raycastTarget = false; marqueeInk.Seed = 8821; marqueeInk.Boil = true;   // drawn on twos
-        }
-        if (!marqueeRt.gameObject.activeSelf) marqueeRt.gameObject.SetActive(true);
-        marqueeRt.SetAsLastSibling();
-        marqueeInk.Repaint();
+        if (on) Marquee3D.Show(marqueeGround, MarqueePlaneY); else Marquee3D.Hide();
     }
 
-    /// <summary>The marquee: a faint paper wash inside an ink-dashed rounded rectangle, small ink corner ticks.</summary>
-    void PaintMarquee(InkPainter g)
+    /// <summary>The point of the ground plane (y = <see cref="MarqueePlaneY"/>) under a screen point; a ray that never reaches it (level with the
+    /// horizon or above) lands far along its flat direction, so a drag toward the horizon still grows the rectangle that way.</summary>
+    public Vector3 GroundPoint(Vector3 screen)
     {
-        var rt = marqueeInk.rectTransform;
-        Vector2 a, b;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, new Vector2(marqueeRect.xMin, marqueeRect.yMin), null, out a);
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, new Vector2(marqueeRect.xMax, marqueeRect.yMax), null, out b);
-        var rr = Rect.MinMaxRect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y), Mathf.Max(a.x, b.x), Mathf.Max(a.y, b.y));
-        if (rr.width < 2f || rr.height < 2f) return;
-        g.RoundRect(rr, 7f, Palette.A(InkUI.Paper, 0.2f), 2.6f, Palette.A(InkUI.Ink, 0.92f), 11f, 7f);
-        float k = Mathf.Min(14f, Mathf.Min(rr.width, rr.height) * 0.3f);
-        Color ink = InkUI.Ink;
-        g.Line(new Vector2(rr.xMin, rr.yMax), new Vector2(rr.xMin + k, rr.yMax), 3.2f, ink); g.Line(new Vector2(rr.xMin, rr.yMax), new Vector2(rr.xMin, rr.yMax - k), 3.2f, ink);
-        g.Line(new Vector2(rr.xMax, rr.yMin), new Vector2(rr.xMax - k, rr.yMin), 3.2f, ink); g.Line(new Vector2(rr.xMax, rr.yMin), new Vector2(rr.xMax, rr.yMin + k), 3.2f, ink);
+        if (cam == null) cam = Camera.main;
+        if (cam == null) return Vector3.zero;
+        Ray ray = cam.ScreenPointToRay(screen);
+        const float far = 400f;
+        if (ray.direction.y < -1e-4f)
+        {
+            float t = (MarqueePlaneY - ray.origin.y) / ray.direction.y;
+            if (t > 0f && t < far) { var p = ray.origin + ray.direction * t; p.y = MarqueePlaneY; return p; }
+        }
+        Vector3 flat = new Vector3(ray.direction.x, 0f, ray.direction.z);
+        if (flat.sqrMagnitude < 1e-6f) flat = Vector3.forward;
+        var q = ray.origin + flat.normalized * far; q.y = MarqueePlaneY;
+        return q;
+    }
+
+    /// <summary>The grids a ground rectangle (x = world X, y = world Z) selects: chord islands, keyboards, stairs and phrases whose platform's
+    /// footprint it overlaps; Moons only when it covers their centre. Heights do not matter (a raised grid stands over its footprint).</summary>
+    public List<KeyBlock> GridsOnGround(Rect r)
+    {
+        var list = new List<KeyBlock>();
+        var sm = SongManager.I;
+        if (sm == null) return list;
+        foreach (var kb in sm.Islands) if (kb != null && kb.enabled && !kb.IsMoon && FootprintOf(kb).Overlaps(r)) list.Add(kb);
+        foreach (var m in sm.Moons)
+        {
+            if (m == null || !m.enabled) continue;
+            Vector3 c = m.VisualCenter;
+            if (r.Contains(new Vector2(c.x, c.z))) list.Add(m);
+        }
+        return list;
+    }
+
+    /// <summary>A grid's footprint on the ground: the world X / Z bounds of its platform's four corners.</summary>
+    public static Rect FootprintOf(KeyBlock kb)
+    {
+        var tr = kb.transform;
+        Vector3 c = tr.InverseTransformPoint(kb.VisualCenter);
+        float hw = kb.Width * 0.5f, hd = kb.Depth * 0.5f;
+        float x0 = float.MaxValue, z0 = float.MaxValue, x1 = float.MinValue, z1 = float.MinValue;
+        for (int k = 0; k < 4; k++)
+        {
+            Vector3 w = tr.TransformPoint(new Vector3(c.x + ((k == 1 || k == 2) ? hw : -hw), 0f, c.z + (k >= 2 ? hd : -hd)));
+            x0 = Mathf.Min(x0, w.x); x1 = Mathf.Max(x1, w.x); z0 = Mathf.Min(z0, w.z); z1 = Mathf.Max(z1, w.z);
+        }
+        return Rect.MinMaxRect(x0, z0, x1, z1);
     }
 
     // ------------------------------------------------------------------ v7 melody phrases (SPEC v7 §14.4; package D)
@@ -2429,6 +2558,23 @@ public class PathManager : MonoBehaviour
         return sm.ColumnBars(kb.column) * Mathf.Max(1, GlobalClock.BeatsPerBar);
     }
 
+    /// <summary>Flow (F1, SPEC flow §1): the capacity of a cube with <paramref name="span"/> on <paramref name="home"/> — the summed pass lengths of
+    /// home and the next span grids of its lane (SongManager.LaneNext; what exists of the chain). Span 0 = <see cref="CapacityOf(KeyBlock)"/>.</summary>
+    public static float CapacityOf(KeyBlock home, int span)
+    {
+        float cap = CapacityOf(home);
+        var sm = SongManager.I;
+        if (cap <= 0f || span <= 0 || sm == null) return cap;
+        var t = home;
+        for (int k = 0; k < Mathf.Min(span, ProjectConfig.MaxCarry); k++)
+        {
+            t = sm.LaneNext(t);
+            if (t == null) break;
+            cap += CapacityOf(t);
+        }
+        return cap;
+    }
+
     /// <summary>v7 §19.1: the beats the drawing uses now (a draft: its notes' lengths; a phrase: its held group's last note's end).</summary>
     public float DrawUsedBeats
     {
@@ -2466,6 +2612,15 @@ public class PathManager : MonoBehaviour
     public void ToggleDrawLoop()
     {
         DrawLoopToggles++;
+        if (FlowOn && IsDrawing)
+        {
+            // Flow: play / pause over the columns the draft covers (the pen up puts the transport back: FlowTransportEnd)
+            runSpace = true;
+            if (drawLoop && FocusLoop.Active && GlobalClock.IsPlaying) { drawLoop = false; FocusLoop.Release(); GlobalClock.Pause(); return; }
+            SyncDrawLoop(true);
+            if (drawLoop) AudioPool.UI(ProceduralAudio.Blip(), 0.25f, 1.2f);
+            return;
+        }
         if (drawLoop && FocusLoop.Active) { drawLoop = false; FocusLoop.Dismiss(); return; }
         var sm = SongManager.I;
         if (sm == null) return;
@@ -2598,6 +2753,8 @@ public class PathManager : MonoBehaviour
     KeyBlock fillIsland; float fillUsed = -9f, fillNext = -9f;
     void UpdateFill()
     {
+        if (FlowOn && IsDrawing) { if (fillIsland != null) ClearFill(fillIsland); UpdateFlowFill(); return; }   // Flow: the fill runs on through the chain's grids
+        if (fillGrids.Count > 0) ClearFlowFill();
         var kb = DrawIsland;
         if (kb != fillIsland) { ClearFill(fillIsland); fillIsland = kb; fillUsed = -9f; }
         if (kb == null) return;
@@ -2621,6 +2778,7 @@ public class PathManager : MonoBehaviour
     void MaybeExtendKeys(TileInteraction t)
     {
         if (AutoHand || !IsDrawing || t == null || t.island == null || !t.island.IsKeyboard) return;
+        if (FlowOn && activeCube != null && t.island != activeCube.Island) return;   // Flow: only the draft's home keyboard grows (the chain's others keep their keys' indices)
         var kb = t.island;
         int dir = t.gridX <= 0 ? -1 : (t.gridX >= kb.cols - 1 ? 1 : 0);
         if (dir == 0 || !KeysLive(true, kb, dir)) return;
@@ -2632,26 +2790,29 @@ public class PathManager : MonoBehaviour
     }
 
     /// <summary>The octaves this draft added: those that hold none of its notes go back (all of them when <paramref name="all"/>: a dropped draft).</summary>
-    void GiveBackKeys(bool all)
+    bool GiveBackKeys(bool all)
     {
-        if (keyExtLow == 0 && keyExtHigh == 0) return;
+        if (keyExtLow == 0 && keyExtHigh == 0) return false;
         var kb = Last != null ? Last.island : null;
-        if (kb == null || !kb.IsKeyboard) { keyExtLow = 0; keyExtHigh = 0; return; }
+        if (FlowOn && activeCube != null) kb = activeCube.Island;   // Flow: the home keyboard (the last note may stand on a later grid of the chain)
+        if (kb == null || !kb.IsKeyboard) { keyExtLow = 0; keyExtHigh = 0; return false; }
+        bool gave = false;
         while (keyExtLow > 0)
         {
-            int lowest = int.MaxValue; foreach (var t in currentPathTiles) if (t != null) lowest = Mathf.Min(lowest, t.gridX);
+            int lowest = int.MaxValue; foreach (var t in currentPathTiles) if (t != null && t.island == kb) lowest = Mathf.Min(lowest, t.gridX);
             if (!all && lowest < 12) break;   // the added octave holds a note
             if (!KeysLive(false, kb, -1)) break;
-            keyExtLow--; KeyShrinks++;
+            keyExtLow--; KeyShrinks++; gave = true;
         }
         while (keyExtHigh > 0)
         {
-            int highest = int.MinValue; foreach (var t in currentPathTiles) if (t != null) highest = Mathf.Max(highest, t.gridX);
+            int highest = int.MinValue; foreach (var t in currentPathTiles) if (t != null && t.island == kb) highest = Mathf.Max(highest, t.gridX);
             if (!all && highest > kb.cols - 13) break;
             if (!KeysLive(false, kb, 1)) break;
-            keyExtHigh--; KeyShrinks++;
+            keyExtHigh--; KeyShrinks++; gave = true;
         }
         keyExtLow = 0; keyExtHigh = 0;
+        return gave;
     }
 
     /// <summary>v7: K's live keyboard range (tests; always there now).</summary>
@@ -2743,6 +2904,828 @@ public class PathManager : MonoBehaviour
         if (t == null || t.island == null || !t.island.IsKeyboard) return;
         DraftKeyEvents++;
         OnDraftKey?.Invoke(t);
+    }
+
+    // ================================================================== Flow (F2, SPEC flow §2): note entry that never hits a wall
+    // The draft is ONE cube with ONE path (F1's span engine): `reach` is its chain — the home grid, then the grids its span walks on — and
+    // `reachNext` the grid the next note's START falls on (past the chain: the grid the overflow rule gives). currentPathTiles holds the REAL
+    // tiles (where each note sounds); the cube maps them onto its home grid itself (AudioCube.SetSpan first, then the path). A structural edit
+    // (a grid made for the lane, a column appended, a made grid given back) REBUILDS the islands: the draft is carried over it as a finished
+    // cube (SuspendDraft / ResumeDraft, by id) without the run ending. A RUN = pen down .. pen up: every History entry made inside it is
+    // folded into one (EndRun), a run Backspaced away leaves none (History.Rewind).
+    /// <summary>Flow (SPEC flow §2) is on: note entry never hits a wall (see the class summary). The game's default; the suites that test the v7
+    /// capacity / finish rules set it false around their sections. <see cref="AutoHand"/> (the pre-v6 suites) keeps its own older rules.</summary>
+    public static bool Flow = true;
+    /// <summary>Flow is what the hand does now (<see cref="Flow"/> and not the pre-v6 <see cref="AutoHand"/>).</summary>
+    public static bool FlowOn => Flow && !AutoHand;
+    /// <summary>A Flow draft is in progress (the HUD's one size row, no capacity words, no measures tag).</summary>
+    public static bool FlowDrawing => I != null && FlowOn && I.IsDrawing;
+    /// <summary>Flow (tests): spans raised (R1) / lowered again, lane grids made / given back, hand-overs to a new draft (R3), rests entered, paths
+    /// picked up again, mirrored clicks, camera framings.</summary>
+    public static int FlowSpans, FlowUnspans, FlowGrids, FlowGridsBack, FlowHandovers, FlowRests, FlowResumes, FlowMirrors, FlowFrames;
+    /// <summary>Flow: a drag paints a note only after this much pointer travel (px at 96 dpi) since the press / the last painted note.</summary>
+    public const float DragPaintPx = 8f;
+
+    readonly List<KeyBlock> reach = new List<KeyBlock>(ProjectConfig.MaxCarry + 2);
+    KeyBlock reachNext; float reachCap; int reachSig = int.MinValue;
+    TileInteraction dragTile;   // the tile under the pointer at the press / the last painted note (a drag paints only onto another tile)
+    /// <summary>Flow: the grids the draft plays on — its home grid, then the grids its span walks on (tests, the draft row).</summary>
+    public IReadOnlyList<KeyBlock> DraftChain => reach;
+    /// <summary>Flow: the grid the next note will be placed on (the chain grid that holds its start; past the chain the grid the overflow rule
+    /// gives; null when a click has to make it first or nothing is drawn).</summary>
+    public KeyBlock NextNoteGrid => IsDrawing && FlowOn ? reachNext : null;
+
+    /// <summary>A note's place independent of the tile objects (a rebuild destroys them): its (x, z), its pitch and whether it is a piano key.</summary>
+    struct Cell { public int x, z, midi; public bool keys; public TileInteraction tile; }
+    static Cell CellOf(TileInteraction t) => t == null ? new Cell() : new Cell { x = t.gridX, z = t.gridZ, midi = t.midi, keys = t.island != null && t.island.IsKeyboard, tile = t };
+
+    /// <summary>The tile of <paramref name="grid"/> that stands for <paramref name="c"/>: the same (x, z) (clamped: chord grids differ in rows) —
+    /// between keyboards the same KEY (its pitch), whatever octaves each has.</summary>
+    static TileInteraction TileFor(KeyBlock grid, Cell c)
+    {
+        if (grid == null) return null;
+        if (c.tile != null && c.tile.island == grid) return c.tile;
+        if (c.keys && grid.IsKeyboard)
+        {
+            TileInteraction best = null; int bd = int.MaxValue;
+            foreach (var t in grid.tiles) { if (t == null) continue; int d = Mathf.Abs(t.midi - c.midi); if (d < bd) { bd = d; best = t; } }
+            if (best != null) return best;
+        }
+        return grid.GetTile(Mathf.Clamp(c.x, 0, Mathf.Max(0, grid.cols - 1)), Mathf.Clamp(c.z, 0, Mathf.Max(0, grid.rows - 1)));
+    }
+
+    int ReachSig()
+    {
+        var sm = SongManager.I;
+        int sig = 17;
+        unchecked
+        {
+            sig = sig * 31 + (activeCube != null ? activeCube.GetInstanceID() : 0);
+            sig = sig * 31 + (activeCube != null ? activeCube.span : 0);
+            sig = sig * 31 + currentPathTiles.Count;
+            sig = sig * 31 + Mathf.RoundToInt(DraftBeats() * ProjectConfig.TicksPerBeat);
+            sig = sig * 31 + (sm != null ? sm.Islands.Count * 131 + Mathf.RoundToInt(sm.TotalBeats * 4f) : 0);
+        }
+        return sig;
+    }
+
+    /// <summary>The reach is read again when the draft or the song changed under it (no per-frame lane walk).</summary>
+    void EnsureReach() { if (ReachSig() != reachSig || (reach.Count > 0 && reach[0] == null)) RefreshReach(); }
+
+    void RefreshReach()
+    {
+        reach.Clear(); reachNext = null; reachCap = 0f;
+        reachSig = ReachSig();
+        var sm = SongManager.I;
+        var home = activeCube != null ? activeCube.Island : null;
+        if (home == null || sm == null) return;
+        reach.Add(home);
+        if (!home.IsMoon)
+        {
+            var t = home;
+            for (int k = 0; k < Mathf.Min(activeCube.span, ProjectConfig.MaxCarry); k++) { t = sm.LaneNext(t); if (t == null) break; reach.Add(t); }
+        }
+        for (int i = 0; i < reach.Count; i++) reachCap += CapacityOf(reach[i]);
+        reachNext = GridAtDraftBeat(DraftBeats());
+    }
+
+    /// <summary>A column may grow one more measure by itself (R2): at most four, its section within SectionBars.</summary>
+    static bool CanGrow(int col)
+    {
+        var sm = SongManager.I;
+        if (sm == null) return false;
+        int want = sm.ColumnBars(col) + 1;
+        return want <= 4 && sm.SectionBarsIfResized(col, want) <= ProjectConfig.SectionBars;
+    }
+
+    /// <summary>The grid a note starting at pattern beat <paramref name="beat"/> of the draft would be placed on, were it added now: the chain grid
+    /// holding that beat; past the chain the grid the overflow rule gives — R1 the lane's next grid (null: a click makes it), R2 the last grid
+    /// (it grows), R3 the lane's grid in the next column (null: a click makes it, or appends a column).</summary>
+    KeyBlock GridAtDraftBeat(float beat)
+    {
+        if (reach.Count == 0) return null;
+        var sm = SongManager.I;
+        float off = 0f;
+        for (int i = 0; i < reach.Count; i++)
+        {
+            float c = CapacityOf(reach[i]);
+            if (c <= 0f || beat < off + c - 1e-4f) return reach[i];
+            off += c;
+        }
+        var last = reach[reach.Count - 1];
+        if (sm == null || last == null) return last;
+        int col = last.column;
+        bool nextIn = col + 1 < sm.ColumnCount && !sm.SectionBoundaryAfter(col);
+        if (nextIn && reach.Count - 1 < ProjectConfig.MaxCarry) { var n = sm.LaneNext(last); if (n != null || sm.LaneCount(col + 1) < ProjectConfig.MaxLanes) return n; }
+        if (!nextIn && CanGrow(col)) return last;
+        return col + 1 < sm.ColumnCount ? NextLaneGrid(last) : null;
+    }
+
+    /// <summary>R3's target among the grids that exist: the lane's grid in the next column, else (no room to make one) any grid of the family there.</summary>
+    static KeyBlock NextLaneGrid(KeyBlock last)
+    {
+        var sm = SongManager.I;
+        int col = last.column + 1;
+        var g = sm.LaneGridIn(col, last.FrontEdge, last.Depth, last.IsKeyboard);
+        if (g != null || sm.LaneCount(col) < ProjectConfig.MaxLanes) return g;
+        foreach (var kb in sm.ColumnIslands(col)) if (kb != null && !kb.IsMoon && !kb.IsStairs && !kb.IsPhrase && kb.IsKeyboard == last.IsKeyboard) return kb;
+        return null;
+    }
+
+    bool InReach(KeyBlock kb) => kb != null && (reach.Contains(kb) || kb == reachNext);
+
+    /// <summary>Flow: the tile a click on <paramref name="tile"/> adds its note to — the same (x, z) on the grid that holds the next note's start
+    /// (the tile itself when that grid is its own, or is still to be made); null: not a tile of the draft's grids.</summary>
+    TileInteraction FlowTarget(TileInteraction tile)
+    {
+        if (tile == null || activeCube == null || !IsDrawing) return null;
+        EnsureReach();
+        if (!InReach(tile.island)) return null;
+        return reachNext != null ? TileFor(reachNext, CellOf(tile)) : tile;
+    }
+
+    /// <summary>Flow: the tiles a click on target <paramref name="target"/> (see <see cref="FlowTarget"/>) adds, in order: the grid line from the
+    /// last note when both stand on the same grid (each tile on the grid that holds ITS start: a run may step over a seam), else just the target
+    /// (the first note on another grid is a leap; a keyboard and a sphere always leap).</summary>
+    void FlowRun(TileInteraction target, List<TileInteraction> into)
+    {
+        into.Clear();
+        if (target == null) return;
+        var last = Last;
+        if (last != null && !Leaps(target) && target.island == last.island && target != last && reachNext == last.island)
+        {
+            LineTiles(last, target, lineScratch);
+            float used = DraftBeats(), b = brushTicks / (float)ProjectConfig.TicksPerBeat;
+            for (int i = 0; i < lineScratch.Count; i++)
+            {
+                var g = GridAtDraftBeat(used + i * b);
+                into.Add(g != null && g != lineScratch[i].island ? TileFor(g, CellOf(lineScratch[i])) : lineScratch[i]);
+            }
+        }
+        if (into.Count == 0) into.Add(target);
+    }
+
+    static bool HasNote(AudioCube c)
+    {
+        if (c == null) return false;
+        for (int i = 0; i < c.nodes.Count; i++) if (c.ModOf(i) != 1) return true;
+        return false;
+    }
+
+    List<int> DraftMods()
+    {
+        var m = new List<int>(currentPathTiles.Count + 1);
+        for (int i = 0; i < currentPathTiles.Count; i++) m.Add(activeCube != null ? activeCube.ModOf(i) : 0);
+        return m;
+    }
+
+    // ---- the overflow rules
+    enum Room { Fits, Handover, Refused }
+
+    /// <summary>Makes room for <paramref name="addBeats"/> more at the draft's end (SPEC flow §2): R1 a next column in the section and span &lt;
+    /// MaxCarry → the span grows onto the lane's next grid (made first when that column has none in this lane); R2 else at the section's last
+    /// column with room → that column grows a measure (live); R3 else → <see cref="Room.Handover"/> (the caller finishes the cube and starts a
+    /// new draft on the lane's grid of the next column).</summary>
+    Room FlowRoom(float addBeats)
+    {
+        var sm = SongManager.I;
+        for (int guard = 0; guard < 12; guard++)
+        {
+            RefreshReach();
+            if (activeCube == null || reach.Count == 0 || sm == null) return Room.Fits;
+            if (activeCube.span > reach.Count - 1) { activeCube.SetSpan(reach.Count - 1); continue; }   // a lane that got shorter under the draft
+            if (CapacityOf(reach[0]) <= 0f) return Room.Fits;                                              // a Moon: no cap
+            if (DraftBeats() + addBeats <= reachCap + 1e-4f) return Room.Fits;
+            var last = reach[reach.Count - 1];
+            int col = last.column;
+            bool nextIn = col + 1 < sm.ColumnCount && !sm.SectionBoundaryAfter(col);
+            if (nextIn && activeCube.span < ProjectConfig.MaxCarry)
+            {
+                if (sm.LaneNext(last) != null) { activeCube.SetSpan(activeCube.span + 1); FlowSpans++; AudioPool.UI(ProceduralAudio.Tick(), 0.22f, 1.3f); continue; }
+                if (MakeLaneGrid(last, col + 1)) continue;
+                if (!IsDrawing) return Room.Refused;   // (the draft did not come back from the rebuild)
+            }
+            else if (!nextIn && CanGrow(col))
+            {
+                int bars = sm.ColumnBars(col);
+                if (sm.ResizeColumnLive(col, bars + 1))
+                {
+                    if (draftCol != col) { draftCol = col; draftFloor = bars; }   // Backspace gives it back, never below this
+                    AutoExpands++;
+                    AudioPool.UI(ProceduralAudio.Tick(), 0.25f, 1.3f);
+                    continue;
+                }
+            }
+            return Room.Handover;
+        }
+        return Room.Refused;
+    }
+
+    struct Made { public int col; public float pz; public bool keys; }
+    readonly List<Made> madeGrids = new List<Made>();   // lane grids this run made (given back by Backspace while still empty)
+
+    /// <summary>R1 where the next column has no grid in the draft's lane: one is made there (a rebuild: the draft is carried over it) and the span
+    /// reaches it. False when the column is full or the new grid did not become the lane's next (the caller hands over instead).</summary>
+    bool MakeLaneGrid(KeyBlock last, int col)
+    {
+        var sm = SongManager.I;
+        if (sm == null || last == null || sm.LaneCount(col) >= ProjectConfig.MaxLanes) return false;
+        bool keys = last.IsKeyboard;
+        int id = SuspendDraft();
+        int at = -1;
+        try { at = sm.AddLaneGrid(last, col); }
+        catch (Exception e) { Debug.LogWarning("[PathManager] AddLaneGrid threw: " + e.Message); }
+        if (!ResumeDraft(id)) { AbandonRun(true); return false; }
+        if (at < 0 || at >= sm.Islands.Count || sm.Islands[at] == null) return false;
+        var made = sm.Islands[at];
+        madeGrids.Add(new Made { col = made.column, pz = made.pz, keys = keys });
+        FlowGrids++;
+        RefreshReach();
+        if (reach.Count == 0 || sm.LaneNext(reach[reach.Count - 1]) != made) return false;
+        activeCube.SetSpan(activeCube.span + 1); FlowSpans++;
+        return true;
+    }
+
+    /// <summary>Backspace took the pattern back inside a shorter chain: a grid this run made for the lane goes again while nothing else uses it.</summary>
+    void GiveBackGrid(KeyBlock gone)
+    {
+        var sm = SongManager.I;
+        if (sm == null || gone == null) return;
+        int k = -1;
+        for (int i = 0; i < madeGrids.Count; i++) if (madeGrids[i].col == gone.column && madeGrids[i].keys == gone.IsKeyboard && Mathf.Abs(madeGrids[i].pz - gone.pz) < 0.05f) { k = i; break; }
+        if (k < 0) return;
+        if (sm.LongGridOf(gone) != null) return;   // an extend reaches it now
+        foreach (var c in SequenceMaster.Cubes)
+        {
+            if (c == null || c == activeCube) continue;
+            if (c.Island == gone) return;
+            if (c.span > 0 && c.Island != null && sm.SpanChain(c.Island, c.span).Contains(gone)) return;
+        }
+        int at = sm.Islands.IndexOf(gone);
+        if (at < 0) return;
+        madeGrids.RemoveAt(k);
+        int id = SuspendDraft();
+        try { sm.RemoveMeasure(at); }
+        catch (Exception e) { Debug.LogWarning("[PathManager] RemoveMeasure threw: " + e.Message); }
+        if (!ResumeDraft(id)) { AbandonRun(true); return; }
+        FlowGridsBack++;
+    }
+
+    /// <summary>Backspace: what the overflow rules added goes back — the measure R2 grew (never below the column's length before it), then the
+    /// span while the pattern fits a shorter chain, with a lane grid the run made.</summary>
+    void FlowUnexpand()
+    {
+        var sm = SongManager.I;
+        CapacityReached = false;
+        if (sm == null || activeCube == null) return;
+        RefreshReach();
+        float used = DraftBeats();
+        int bpb = Mathf.Max(1, GlobalClock.BeatsPerBar);
+        if (draftCol >= 0 && draftCol < sm.ColumnCount && draftFloor > 0 && sm.ColumnBars(draftCol) > draftFloor)
+        {
+            float before = 0f; bool found = false;
+            for (int i = 0; i < reach.Count; i++) { if (reach[i] != null && reach[i].column == draftCol) { found = true; break; } before += CapacityOf(reach[i]); }
+            if (found)
+            {
+                int want = Mathf.Max(draftFloor, Mathf.CeilToInt((used - before) / bpb - 1e-4f));
+                if (want < sm.ColumnBars(draftCol) && sm.ResizeColumnLive(draftCol, want)) AutoUnexpands++;
+            }
+        }
+        for (int guard = 0; guard < ProjectConfig.MaxCarry + 1; guard++)
+        {
+            RefreshReach();
+            if (!IsDrawing || activeCube == null || activeCube.span <= 0 || reach.Count < 2) break;
+            var gone = reach[reach.Count - 1];
+            if (used > reachCap - CapacityOf(gone) + 1e-4f) break;
+            if (gone.column == draftCol) draftCol = -1;
+            activeCube.SetSpan(reach.Count - 2); FlowUnspans++;
+            GiveBackGrid(gone);
+        }
+        if (!IsDrawing) return;
+        RefreshReach(); UpdateHighlights(); SyncDrawLoop(false);
+    }
+
+    // ---- carrying the draft over a rebuild, the pen going down on a finished cube
+    /// <summary>The draft becomes a finished cube without the run ending (only finished cubes survive a rebuild); its id.</summary>
+    int SuspendDraft()
+    {
+        var c = activeCube;
+        if (c == null) return 0;
+        c.Peek(null);
+        HideDraftPreview(); ResetHoverAudition(); ClearHighlights(); ClearFlowFill();
+        activeCube = null; currentPathTiles.Clear();
+        currentState = EditorState.Idle; isSettingPath = false;
+        reach.Clear(); reachNext = null; reachSig = int.MinValue;
+        c.Finalize();
+        return c.id;
+    }
+
+    static AudioCube FindCube(int id)
+    {
+        if (id == 0) return null;
+        foreach (var x in SequenceMaster.Cubes) if (x != null && x.id == id && x.isFinalized) return x;
+        return null;
+    }
+
+    bool ResumeDraft(int id)
+    {
+        var c = FindCube(id);
+        if (c == null) return false;
+        TakeUp(c);
+        return true;
+    }
+
+    /// <summary>The pen goes down on finished cube <paramref name="c"/>: it is the draft again (a hologram, not in the song's snapshots until it
+    /// is finished), its path the real tiles its notes sound on.</summary>
+    void TakeUp(AudioCube c)
+    {
+        if (candidate == c) SetCandidate(null);
+        if (hoverCube == c) { hoverCube.SetHover(false); hoverCube = null; }
+        activeCube = c;
+        c.isFinalized = false;
+        c.SetHologram(true);
+        currentState = EditorState.DrawingPath; isSettingPath = true;
+        SequenceMaster.RecalculateTimeline();
+        currentPathTiles.Clear();
+        var pt = c.PathTiles();
+        for (int i = 0; i < pt.Count; i++)
+        {
+            var rt = c.RealTile(i);
+            currentPathTiles.Add(rt != null && pt[i] != null && rt.gridX == pt[i].gridX && rt.gridZ == pt[i].gridZ ? rt : pt[i]);   // (a cell its grid does not have keeps the tile that has it)
+        }
+        RefreshReach();
+        UpdateHighlights();
+        previewTo = null;
+    }
+
+    /// <summary>
+    /// Flow RESUME (SPEC flow §2): the pen goes down again at the END of finished cube <paramref name="c"/> — it becomes the draft (hologram look,
+    /// more notes / rests / Backspace as while it was first drawn); the pen up pushes ONE History entry for whatever changed (none when nothing
+    /// did). The game does it for a click, with a cube of the same group in the hand, on the last bead of a finished path (a "+" badge lies by it).
+    /// False for a Moon, stairs or phrase cube, a cube without per-note lengths, while drawing or inspecting.
+    /// </summary>
+    public bool Resume(AudioCube c)
+    {
+        if (c == null || IsDrawing || !c.isFinalized || c.nodes.Count == 0 || !c.HasDurations || c.IsOnMoon || c.Moon != null || CubeInspector.IsOpen) return false;
+        if (!ResumableGrid(c.Island)) return false;
+        EndPhraseSession();
+        Deselect();
+        TakeUp(c);
+        keyExtLow = 0; keyExtHigh = 0; draftCol = -1; draftFloor = -1; drawLoop = false; CapacityReached = false;
+        MelodyLine.Ensure();
+        if (FlowOn) { BeginRun(true); FlowTransportStart(); } else QuietStart();
+        AudioPool.UI(ProceduralAudio.Blip(), 0.28f, 1.35f);
+        FlowResumes++;
+        RaiseDraft(0, c);
+        return true;
+    }
+
+    static bool ResumableGrid(KeyBlock kb) => kb != null && !kb.IsMoon && !kb.IsPhrase && !kb.IsStairs;
+    static bool Resumable(AudioCube c, int instrument) => c != null && c.isFinalized && c.instrument == instrument && c.nodes.Count > 0 && c.HasDurations
+        && !c.IsOnMoon && c.Moon == null && c.echoOf < 0 && c.BodyVisible && ResumableGrid(c.Island);
+
+    /// <summary>The newest finished path of the held group that ENDS on <paramref name="tile"/> (a click there picks it up again), null none.</summary>
+    AudioCube ResumableAt(TileInteraction tile)
+    {
+        AudioCube best = null;
+        if (tile == null) return null;
+        foreach (var c in SequenceMaster.Cubes)
+            if (Resumable(c, selectedInstrument) && c.RealTile(c.nodes.Count - 1) == tile && (best == null || c.id > best.id)) best = c;
+        return best;
+    }
+
+    // ---- the run: pen down .. pen up = one undo entry; the transport
+    int runMark = -1;                       // History.UndoCount at the pen down (-1: no run)
+    bool runOld, runHold, runWasPlaying, runSpace; double runBeat;
+    readonly List<int> runCubes = new List<int>(), runMarks = new List<int>();   // cubes the run finished on its way (R3) and History.UndoCount after each
+    readonly List<int> pendingRests = new List<int>();   // rests asked for before the first note (a pickup): applied when the first tile is clicked
+    /// <summary>Flow: rests asked for with a cube in the hand before the first note (they open the next path).</summary>
+    public int PendingRests => pendingRests.Count;
+    /// <summary>Flow: a run is in progress (from the pen down to the pen up; tests).</summary>
+    public bool InRun => runMark >= 0;
+
+    void BeginRun(bool old)
+    {
+        runMark = History.UndoCount; runOld = old;
+        runCubes.Clear(); runMarks.Clear(); madeGrids.Clear();
+    }
+
+    /// <summary>Pen up: everything the run pushed is ONE undo entry; the transport goes back to what it was.</summary>
+    void EndRun()
+    {
+        if (runMark < 0) return;
+        for (int g = 0; g < 64 && runMark >= 1 && History.UndoCount > runMark + 1 && History.UndoCount >= 3; g++) History.FoldLast();
+        runMark = -1; runCubes.Clear(); runMarks.Clear(); madeGrids.Clear();
+        FlowTransportEnd();
+    }
+
+    /// <summary>The draft was dropped from outside (a song rebuild, a test): the run ends where it stands, without touching History.</summary>
+    void AbandonRun(bool transport)
+    {
+        runMark = -1; runCubes.Clear(); runMarks.Clear(); madeGrids.Clear();
+        if (transport) FlowTransportEnd(); else drawLoop = false;
+    }
+
+    /// <summary>
+    /// Flow: the draft goes without a trace — Backspace took its last event (<paramref name="stepBack"/>: the pen steps back onto the cube the run
+    /// finished before it, R3) or it was ended holding only rests. What the run made for it (a column, a lane grid) goes with it; a path that was
+    /// picked up again and emptied is deleted (one History entry).
+    /// </summary>
+    void BackOut(bool stepBack)
+    {
+        if (!IsDrawing) return;
+        if (runMark < 0) { CancelPath(); return; }
+        bool hadPrev = runCubes.Count > 0;
+        int prevId = hadPrev ? runCubes[runCubes.Count - 1] : 0;
+        int floor = hadPrev ? runMarks[runMarks.Count - 1] : runMark;
+        bool old = runOld && !hadPrev;
+        bool rewind = !old && floor >= 1 && History.UndoCount > floor;
+        runHold = true;
+        try { CancelPath(!rewind); } finally { runHold = false; }
+        if (rewind) History.Rewind(floor);
+        if (hadPrev)
+        {
+            runCubes.RemoveAt(runCubes.Count - 1); runMarks.RemoveAt(runMarks.Count - 1);
+            var c = stepBack ? FindCube(prevId) : null;
+            if (c != null)
+            {
+                TakeUp(c);
+                keyExtLow = 0; keyExtHigh = 0; draftCol = -1; draftFloor = -1;
+                MelodyLine.Ensure();
+                SyncDrawLoop(false);
+                RaiseDraft(0, c);
+                KeepInView();
+                return;
+            }
+        }
+        if (old) History.Push();
+        EndRun();
+    }
+
+    void FlowTransportStart()
+    {
+        runWasPlaying = GlobalClock.IsPlaying; runBeat = GlobalClock.SongBeatD; runSpace = false;
+        if (FocusLoop.Active) FocusLoop.Release();   // a loop left from before (its region only)
+        drawLoop = false;
+        if (runWasPlaying) SyncDrawLoop(true);       // a playing song plays on: it loops the columns the draft covers
+    }
+
+    /// <summary>The loop over the columns the draft covers (home .. the last grid of its chain; it grows with the span).
+    /// <paramref name="start"/>: begin it; else only move a loop that is on.</summary>
+    void SyncDrawLoop(bool start)
+    {
+        var sm = SongManager.I;
+        if (sm == null || activeCube == null || !IsDrawing) return;
+        if (!start && !(drawLoop && FocusLoop.Active)) return;
+        var home = activeCube.Island;
+        if (home == null) return;
+        if (reach.Count == 0 || reach[0] != home) RefreshReach();
+        int a = home.IsMoon ? sm.LitColumn : home.column, b = a;
+        if (!home.IsMoon && reach.Count > 0 && reach[reach.Count - 1] != null) b = Mathf.Max(a, reach[reach.Count - 1].column);
+        if (!(FocusLoop.Active && FocusLoop.Phrase < 0 && FocusLoop.Column == a && FocusLoop.LastColumn == b && GlobalClock.IsPlaying)) FocusLoop.Begin(a, b);
+        drawLoop = FocusLoop.Active;
+    }
+
+    /// <summary>Pen up: a song that played plays on from where the loop is (paused when Space paused it); a stopped one is stopped at its place
+    /// again — never a rewind to the start.</summary>
+    void FlowTransportEnd()
+    {
+        bool loop = drawLoop && FocusLoop.Active;
+        drawLoop = false;
+        if (loop) FocusLoop.Release();
+        if (runWasPlaying) return;
+        if (!loop && !runSpace && !GlobalClock.IsPlaying) return;   // nothing ever moved
+        if (runBeat <= 1e-6) { GlobalClock.Stop(); return; }
+        if (GlobalClock.IsPlaying) GlobalClock.Pause();
+        if (Math.Abs(GlobalClock.SongBeatD - runBeat) > 1e-6) GlobalClock.Seek(runBeat);
+    }
+
+    // ---- entering events
+    /// <summary>The first click of a path: the rests asked for before it open the path (a pickup), then the note.</summary>
+    void FlowStart(TileInteraction tile)
+    {
+        if (pendingRests.Count == 0) { StartPath(tile); return; }
+        var rests = new List<int>(pendingRests);
+        pendingRests.Clear();
+        var cell = CellOf(tile);
+        StartPath(tile, true, rests[0]);
+        for (int i = 1; i < rests.Count && IsDrawing; i++) FlowAdd(cell, true, rests[i], false, null);
+        if (IsDrawing) FlowAdd(cell, false, brushTicks, true, null);
+    }
+
+    /// <summary>A click (or a painted tile) on a tile of the draft's grids: the notes it adds (see <see cref="FlowRun"/>), each of the brush size.</summary>
+    void FlowClick(TileInteraction tile)
+    {
+        if (!IsDrawing || activeCube == null || tile == null) return;
+        var target = FlowTarget(tile);
+        var last = Last;
+        if (target != null && last != null && !Leaps(target) && target.island == last.island && target != last && reachNext == last.island)
+        {
+            LineTiles(last, target, lineScratch);
+            if (lineScratch.Count > 0)
+            {
+                var cells = new List<Cell>(lineScratch.Count);
+                foreach (var t in lineScratch) cells.Add(CellOf(t));
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    bool end = i == cells.Count - 1;
+                    if (!FlowAdd(cells[i], false, brushTicks, end, end && tile != target ? tile : null)) break;
+                }
+                return;
+            }
+        }
+        FlowAdd(CellOf(tile), false, brushTicks, true, tile);
+    }
+
+    /// <summary>
+    /// Flow: one more event at the draft's end — a note of <paramref name="ticks"/> on <paramref name="cell"/>'s tile of the grid that holds its
+    /// START (the overflow rules make room first: <see cref="FlowRoom"/>), or a REST standing there. <paramref name="origin"/>: the tile the
+    /// pointer was on — when the note lands on another grid both flash and a short dashed arc runs between them. False when nothing was added.
+    /// </summary>
+    bool FlowAdd(Cell cell, bool rest, int ticks, bool sound, TileInteraction origin)
+    {
+        if (!IsDrawing || activeCube == null) return false;
+        ticks = AudioCube.ClampTicks(ticks);
+        var room = FlowRoom(ticks / (float)ProjectConfig.TicksPerBeat);
+        if (room == Room.Handover) return Handover(cell, rest, ticks);
+        if (room == Room.Refused || !IsDrawing || activeCube == null) { AudioPool.UI(ProceduralAudio.Thud(), 0.3f, 0.9f); return false; }
+        var prev = Last;
+        var grid = reachNext != null ? reachNext : (prev != null ? prev.island : activeCube.Island);
+        var tile = TileFor(grid, cell);
+        if (tile == null) return false;
+        var d = DraftDurs(); var m = DraftMods();
+        currentPathTiles.Add(tile); d.Add(ticks); m.Add(rest ? 1 : 0);
+        activeCube.SetPathAndMods(currentPathTiles, m, d);
+        Color c = activeCube.Color;
+        if (!rest) tile.Flash(c, 0.7f);
+        if (!rest && origin != null && origin != tile) { origin.Flash(c, 0.55f); MirrorArc(origin.Top, tile.Top, c); FlowMirrors++; }
+        if (!GlobalClock.IsPlaying) activeCube.PreviewHopTo(tile);
+        if (rest) { FlowRests++; if (sound) AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 1.1f); }
+        else
+        {
+            if (sound) tile.PlayPreview(activeCube.instrument, activeCube.octave, activeCube.voice, activeCube.layer, VoiceRules.BendOf(activeCube, tile, activeCube.nodes.Count - 1));
+            RaiseDraftKey(tile);
+            if (Keys(tile.island)) KeyAdds++;
+            int ke = KeyExtends;
+            MaybeExtendKeys(tile);   // v7 §20.1 (the home keyboard only)
+            if (KeyExtends != ke && activeCube.span > 0) activeCube.SetPathAndMods(currentPathTiles, DraftMods(), DraftDurs());   // re-indexed keys: the cells follow
+        }
+        RefreshReach(); UpdateHighlights();
+        previewTo = null;
+        SyncDrawLoop(false);
+        if (prev == null || tile.island != prev.island) KeepInView();
+        RaiseDraft(1, activeCube);
+        return true;
+    }
+
+    /// <summary>Flow: a REST of the brush size — while drawing at the draft's end (the cube stays on its tile); with a cube in the hand it opens
+    /// the next path: on the hovered free tile, else it is remembered and stands on the first tile clicked (R, the draft row's hollow cube).</summary>
+    public bool AddRest()
+    {
+        if (!FlowOn) return false;
+        if (IsDrawing)
+        {
+            var last = Last;
+            return last != null && activeCube != null && FlowAdd(CellOf(last), true, brushTicks, true, null);
+        }
+        if (Hand != HandKind.Cube || WorldInput.WorldLocked) return false;
+        var t = hoverTile;
+        if (t != null && t.island != null && !t.island.IsPhrase && !t.island.IsStairs && TopCubeOn(t) == null)
+        {
+            StartPath(t, true, brushTicks);
+            dragging = false;
+            return IsDrawing;
+        }
+        if (pendingRests.Count >= 16) return false;
+        pendingRests.Add(brushTicks);
+        AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 1.1f);
+        return true;
+    }
+
+    /// <summary>R3: the draft is finished where it stands — the run goes on — and a NEW draft starts by itself on the lane's grid of the next
+    /// column (made when that column has none in the lane; a column is appended at the song's end): the event lands there.</summary>
+    bool Handover(Cell cell, bool rest, int ticks)
+    {
+        var sm = SongManager.I;
+        RefreshReach();
+        var prev = activeCube;
+        if (sm == null || prev == null || reach.Count == 0 || !HasNote(prev)) { AudioPool.UI(ProceduralAudio.Thud(), 0.3f, 0.9f); return false; }
+        var last = reach[reach.Count - 1];
+        int col = last.column;
+        FinishPath(false);
+        int prevId = prev.id, mark = History.UndoCount;
+        KeyBlock next = null;
+        try
+        {
+            if (col + 1 >= sm.ColumnCount) { int at = sm.AppendLaneColumn(last); next = at >= 0 && at < sm.Islands.Count ? sm.Islands[at] : null; }
+            else
+            {
+                next = NextLaneGrid(last);
+                if (next == null) { int at = sm.AddLaneGrid(last, col + 1); next = at >= 0 && at < sm.Islands.Count ? sm.Islands[at] : null; }
+            }
+        }
+        catch (Exception e) { Debug.LogWarning("[PathManager] Flow hand-over threw: " + e.Message); }
+        var tile = next != null ? TileFor(next, cell) : null;
+        if (tile == null) { EndRun(); AudioPool.UI(ProceduralAudio.Thud(), 0.3f, 0.9f); return false; }
+        runCubes.Add(prevId); runMarks.Add(mark);
+        FlowHandovers++;
+        StartPath(tile, rest, ticks);
+        if (!IsDrawing) { EndRun(); return false; }
+        KeepInView();
+        return true;
+    }
+
+    // ---- the look: the fill on every grid of the chain, the mirror arc, the camera, the "+" badges
+    readonly List<KeyBlock> fillGrids = new List<KeyBlock>();
+
+    /// <summary>The beat pips of every grid of the chain show the draft's fill (and where the next note goes: on the grid a click would
+    /// step onto, too). Nothing ever reads as "past the end": the melody goes on.</summary>
+    void UpdateFlowFill()
+    {
+        EnsureReach();
+        float used = DraftBeats(), next = used + brushTicks / (float)ProjectConfig.TicksPerBeat, off = 0f;
+        for (int i = fillGrids.Count - 1; i >= 0; i--)
+        {
+            var g = fillGrids[i];
+            if (g != null && InReach(g)) continue;
+            if (g != null) g.SetDraftFill(-1f, 0f);
+            fillGrids.RemoveAt(i);
+        }
+        for (int i = 0; i < reach.Count; i++)
+        {
+            var g = reach[i];
+            float cap = g != null ? CapacityOf(g) : 0f;
+            if (cap <= 0f) continue;
+            float u = Mathf.Clamp(used - off, 0f, cap), n = Mathf.Clamp(next - off, 0f, cap);
+            g.SetDraftFill(u, Mathf.Max(u, n));
+            if (!fillGrids.Contains(g)) fillGrids.Add(g);
+            off += cap;
+        }
+        if (reachNext != null && !reach.Contains(reachNext))
+        {
+            float cap = CapacityOf(reachNext);
+            if (cap > 0f) { reachNext.SetDraftFill(0f, Mathf.Min(next - used, cap)); if (!fillGrids.Contains(reachNext)) fillGrids.Add(reachNext); }
+        }
+    }
+
+    void ClearFlowFill()
+    {
+        for (int i = 0; i < fillGrids.Count; i++) if (fillGrids[i] != null) fillGrids[i].SetDraftFill(-1f, 0f);
+        fillGrids.Clear();
+    }
+
+    LineRenderer mirrorArc; Material mirrorArcMat; float mirrorArcT = 9f; Vector3 mirrorA, mirrorB;
+    /// <summary>Seconds the mirror arc shows.</summary>
+    public const float MirrorArcSeconds = 0.5f;
+    /// <summary>Flow: the dashed arc from the clicked tile to the tile the note landed on is showing (tests).</summary>
+    public bool MirrorArcShown => mirrorArc != null && mirrorArc.enabled;
+
+    /// <summary>A click mirrored onto another grid: a short dashed arc (the draft preview's dashes, in the cube's colour) from the clicked tile to
+    /// the tile that took the note.</summary>
+    void MirrorArc(Vector3 a, Vector3 b, Color c)
+    {
+        if (mirrorArc == null)
+        {
+            var go = new GameObject("FlowMirrorArc");
+            mirrorArc = go.AddComponent<LineRenderer>();
+            mirrorArc.useWorldSpace = true; mirrorArc.widthMultiplier = 0.085f;
+            mirrorArc.numCapVertices = 3; mirrorArc.textureMode = LineTextureMode.Tile; mirrorArc.alignment = LineAlignment.View;
+            mirrorArcMat = Fx.Flow(Color.white, 1.2f, 4.5f, 2.4f, 0f);
+            mirrorArcMat.SetFloat("_SrcBlend", 1f); mirrorArcMat.SetFloat("_DstBlend", 10f);
+            mirrorArc.material = mirrorArcMat;
+            mirrorArc.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; mirrorArc.receiveShadows = false;
+        }
+        mirrorArcMat.SetColor(PreviewColorId, c);
+        mirrorA = a + Vector3.up * 0.08f; mirrorB = b + Vector3.up * 0.08f; mirrorArcT = 0f;
+        mirrorArc.enabled = true;
+        DrawMirrorArc(0f);
+    }
+
+    void DrawMirrorArc(float u)
+    {
+        const int n = 16;
+        float h = 0.7f + 0.12f * Vector3.Distance(mirrorA, mirrorB);
+        // it grows out of the clicked tile (the first third), holds, then its tail leaves toward the note
+        float head = Mathf.Clamp01(u / 0.35f), tail = Mathf.Clamp01((u - 0.6f) / 0.4f);
+        int i0 = Mathf.RoundToInt(tail * n), i1 = Mathf.Max(i0 + 1, Mathf.RoundToInt(head * n));
+        mirrorArc.positionCount = i1 - i0 + 1;
+        for (int i = i0; i <= i1; i++)
+        {
+            float t = i / (float)n;
+            mirrorArc.SetPosition(i - i0, Vector3.Lerp(mirrorA, mirrorB, t) + Vector3.up * (4f * t * (1f - t) * h));
+        }
+    }
+
+    /// <summary>The grid the melody just stepped onto stays in view: when it is off screen or under the HUD's bands the camera eases to frame the
+    /// chain — only on the note that changes the grid, never against a camera drag.</summary>
+    void KeepInView()
+    {
+        var oc = OrbitCamera.I;
+        var last = Last;
+        if (oc == null || oc.Suspended || CameraDragging || last == null || last.island == null) return;
+        if (cam == null) cam = Camera.main;
+        if (cam == null || GridInView(last.island)) return;
+        Bounds b = last.island.VisualBounds;
+        for (int i = 0; i < reach.Count; i++) if (reach[i] != null) b.Encapsulate(reach[i].VisualBounds);
+        oc.FrameBounds(b);
+        FlowFrames++;
+    }
+
+    bool GridInView(KeyBlock kb)
+    {
+        Bounds b = kb.VisualBounds;
+        float k = Screen.height / 1080f;
+        float x0 = 150f * k, x1 = Screen.width - 24f * k, y0 = DurationPicker.BottomBand * k, y1 = Screen.height - DurationPicker.TopBand * k;
+        for (int i = 0; i < 4; i++)
+        {
+            var s = cam.WorldToScreenPoint(new Vector3((i & 1) == 0 ? b.min.x : b.max.x, b.center.y, i < 2 ? b.min.z : b.max.z));
+            if (s.z <= 0f || s.x < x0 || s.x > x1 || s.y < y0 || s.y > y1) return false;
+        }
+        return true;
+    }
+
+    // RESUME's sign: while a cube is in the hand a small cream "+" badge lies by the last bead of every finished path of its group that a click
+    // there picks up again (flat on the tile like the beads and the job numbers: nothing stands up in the world). A pencil was tried first: at
+    // the game's zoom it read as a dash, and with the bead's ring as a magnifying glass.
+    readonly List<Transform> resumeMarks = new List<Transform>(); readonly List<TileInteraction> resumeTiles = new List<TileInteraction>();
+    Material resumeDiscMat, resumeRingMat, resumePlusMat; int resumeScanFrame = -100;
+    /// <summary>Flow: "+" badges showing now (one per finished path of the held group that can be picked up again; tests).</summary>
+    public int ResumeMarkCount { get; private set; }
+    /// <summary>Flow: the tile badge <paramref name="i"/> lies on (tests / captures).</summary>
+    public TileInteraction ResumeMarkTile(int i) => i >= 0 && i < resumeTiles.Count ? resumeTiles[i] : null;
+
+    Transform NewResumeMark()
+    {
+        if (resumeDiscMat == null)
+        {
+            resumeDiscMat = Fx.Alpha(IconFactory.GetTexture("dot"), InkUI.Paper);
+            resumeRingMat = Fx.Alpha(IconFactory.GetTexture("ring"), InkUI.Ink);
+            resumePlusMat = Fx.Alpha(IconFactory.GetTexture("plus"), InkUI.Ink);
+        }
+        var root = new GameObject("ResumeMark").transform;
+        var mats = new[] { resumeDiscMat, resumeRingMat, resumePlusMat };
+        float[] size = { 0.9f, 1f, 0.62f };
+        for (int i = 0; i < 3; i++)
+        {
+            var q = new GameObject(i == 0 ? "Disc" : (i == 1 ? "Ring" : "Plus"));
+            q.transform.SetParent(root, false);
+            q.AddComponent<MeshFilter>().sharedMesh = MeshFactory.FlatQuad();
+            var mr = q.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mats[i]; mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; mr.receiveShadows = false;
+            q.transform.localPosition = new Vector3(0f, 0.004f * i, 0f);
+            q.transform.localScale = new Vector3(size[i], 1f, size[i]);
+        }
+        return root;
+    }
+
+    void TickFlow()
+    {
+        if (mirrorArc != null && mirrorArc.enabled)
+        {
+            mirrorArcT += Time.unscaledDeltaTime;
+            float u = mirrorArcT / MirrorArcSeconds;
+            if (u >= 1f) { mirrorArc.enabled = false; mirrorArc.positionCount = 0; }
+            else DrawMirrorArc(u);
+        }
+        bool show = FlowOn && Hand == HandKind.Cube && !IsDrawing && !WorldInput.WorldLocked && !Presenter.Active && strokeIsland < 0 && !shiftArmed && (islandDrag == null || !islandDrag.Busy);
+        if (!show)
+        {
+            if (ResumeMarkCount > 0) { for (int i = 0; i < resumeMarks.Count; i++) if (resumeMarks[i] != null && resumeMarks[i].gameObject.activeSelf) resumeMarks[i].gameObject.SetActive(false); }
+            ResumeMarkCount = 0; resumeTiles.Clear(); resumeScanFrame = -100;
+            return;
+        }
+        if (Time.frameCount - resumeScanFrame >= 12)
+        {
+            // (the cubes are scanned a few times a second; the badges follow their tiles every frame)
+            resumeScanFrame = Time.frameCount;
+            resumeTiles.Clear();
+            bool live = GlobalClock.IsPlaying;
+            foreach (var c in SequenceMaster.Cubes)
+            {
+                if (!Resumable(c, selectedInstrument)) continue;
+                var t = c.RealTile(c.nodes.Count - 1);
+                if (t == null || resumeTiles.Contains(t) || (!live && TopCubeOn(t) != null)) continue;   // a cube resting there takes the click (its card)
+                resumeTiles.Add(t);
+            }
+        }
+        float pulse = (Mathf.FloorToInt(Time.unscaledTime * 3f) & 1) == 0 ? 1f : 1.1f;   // a slow breath on twos: it asks to be clicked
+        int n = 0;
+        for (int i = 0; i < resumeTiles.Count; i++)
+        {
+            var t = resumeTiles[i];
+            if (t == null) continue;
+            while (resumeMarks.Count <= n) resumeMarks.Add(NewResumeMark());
+            var m = resumeMarks[n++];
+            if (!m.gameObject.activeSelf) m.gameObject.SetActive(true);
+            float foot = AudioCube.FootOf(t), s = 0.6f * foot * pulse;
+            var isl = t.island != null ? t.island.transform : null;
+            Vector3 side = isl != null ? (isl.right - isl.forward) * (0.27f * foot) : new Vector3(0.27f * foot, 0f, -0.27f * foot);   // the tile's near right corner: the bead stays clear
+            m.position = t.Top + side + Vector3.up * 0.085f;
+            m.rotation = isl != null ? isl.rotation : Quaternion.identity;
+            m.localScale = new Vector3(s, 1f, s);
+        }
+        for (int i = n; i < resumeMarks.Count; i++) if (resumeMarks[i] != null && resumeMarks[i].gameObject.activeSelf) resumeMarks[i].gameObject.SetActive(false);
+        ResumeMarkCount = n;
     }
 
     // ---- legacy API

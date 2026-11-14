@@ -7,7 +7,7 @@ using UnityEngine.EventSystems;
 /// v6 (SPEC v6 §8.4, package U2): the clipboard chip — "any given cube path pasted onto the next grid". After a copy (the cube card's copy,
 /// Cmd+C, the island header) a small paper card pops in at the bottom-right corner (it flies there from what was copied): the pattern drawn
 /// as dots joined by a line in its instrument colour (a mini melody: x = when, y = pitch), the instrument's cube with its voice pips in the
-/// corner, and a small × sticker (clear). Click = pick the pattern up (PathManager.PickUpPattern: paste mode — the cursor carries the card and
+/// corner, and a small trash-can sticker (clear: Flow E2 — a destructive control never wears the cross). Click = pick the pattern up (PathManager.PickUpPattern: paste mode — the cursor carries the card and
 /// hovering a grid shows the adapted notes; a second click puts it down; while inspecting the card closes first); drag it onto a grid = paste
 /// there (Clipboard.PasteOn: one History entry, the magic flight), the hand then goes back to what it held. While the pattern is in the hand
 /// the chip lifts like a held instrument chip. The × shows only while the chip (or the ×) is hovered: one hit target at rest.
@@ -91,10 +91,10 @@ public class HudClipboard : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         fan.onPick = PickMode;
         fan.onDragBegin = BeginModeDrag;
         fan.onDragEnd = EndModeDrag;
-        // the × sticker on the top-right corner (its own 28 px hit)
+        // the clear sticker on the top-right corner (its own 28 px hit): a trash can — it throws the copied pattern away
         InkShape xb; InkPainter xa;
-        clearBtn = HudKit.Sticker(node, "ClipClear", new Vector2(0.5f, 0.5f), new Vector2(W * 0.5f - 2f, H * 0.5f - 2f), new Vector2(28f, 28f), InkShape.Kind.Sticker, Comic.Cream,
-                                  PaintCross, "clear", ClickClear, out xb, out xa);
+        clearBtn = HudKit.Sticker(node, "ClipClear", new Vector2(0.5f, 0.5f), new Vector2(W * 0.5f - 2f, H * 0.5f - 2f), new Vector2(30f, 28f), InkShape.Kind.Sticker, Comic.Cream,
+                                  PaintClear, "clear", ClickClear, out xb, out xa);
         xb.SetInk(1.5f, 2.4f); xb.ShadowOffset = new Vector2(2f, -3f);
         clearBtn.gameObject.SetActive(false);   // shown while the chip is hovered
         Hints.Register("clipboard", node);
@@ -349,12 +349,8 @@ public class HudClipboard : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         }
     }
 
-    static void PaintCross(InkPainter p)
-    {
-        Vector2 c = p.Area.center;
-        p.Line(c + new Vector2(-5f, -5f), c + new Vector2(5f, 5f), 2.4f, Comic.Ink, true);
-        p.Line(c + new Vector2(-5f, 5f), c + new Vector2(5f, -5f), 2.4f, Comic.Ink, true);
-    }
+    /// <summary>Flow E2: clearing the clipboard throws the copied pattern away — a trash can (the island ⋯ card's drawing), never the cross.</summary>
+    static void PaintClear(InkPainter p) { IslandHeader.PaintTrash(p, p.Area.center, 0.72f); }
 
     // ------------------------------------------------------------------ per frame
     void Update()

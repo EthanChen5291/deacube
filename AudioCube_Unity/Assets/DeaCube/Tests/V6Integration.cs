@@ -191,9 +191,13 @@ public static class V6Integration
         Check(pm.Hand == PathManager.HandKind.Cube && pm.selectedInstrument == 0, "clicking the keys chip puts a keys cube in the hand", "hand " + pm.Hand);
         int hd = History.UndoCount, cb = FinalizedCubes();
         var end = a0.GetTile(t0.gridX + 3, t0.gridZ);
+        // Flow (2026-11-13): "the end tile again finishes" is the v6 gesture (with Flow the same tile again is the same note again; Enter, a
+        // right-click or the ✓ finish: FlowChecksDraw f) — this step keeps testing it with PathManager.Flow off
+        PathManager.Flow = false;
         yield return Click(t0);
         yield return Click(end);
         yield return Click(end);   // the end tile again finishes
+        PathManager.Flow = true;
         yield return Wait(0.9f);
         var drawn = NewestOn(a0);
         Check(FinalizedCubes() == cb + 1 && History.UndoCount == hd + 1 && drawn != null && drawn.nodes.Count == 4 && pm.Hand == PathManager.HandKind.Cube,
@@ -411,10 +415,12 @@ public static class V6Integration
         var v0 = FreeTile(a3, 1);
         if (v0 != null)
         {
+            PathManager.Flow = false;   // (the end tile again finishes: the v6 gesture, see step 2)
             yield return Click(v0);
             var v1 = a3.GetTile(v0.gridX + 1, v0.gridZ);
             yield return Click(v1);
             yield return Click(v1);
+            PathManager.Flow = true;
             yield return Wait(0.8f);
         }
         var vc = NewestOn(a3);
@@ -433,7 +439,9 @@ public static class V6Integration
         Check(m1 >= 1 && sec0 && sec1 && Mathf.Abs(s0) < 0.01f && Mathf.Abs(e0 - split) < 0.01f && Mathf.Abs(s1 - split) < 0.01f && Mathf.Abs(e1 - GlobalClock.TotalBeats) < 0.01f,
               "a drum moon placed at part 3: the first moon plays until there, the new one from there to the end", "moon 0 " + s0 + ".." + e0 + ", moon " + m1 + " " + s1 + ".." + e1 + " of " + GlobalClock.TotalBeats);
         var rail = HudColumnRail.I;
-        Check(rail != null && rail.DrumSectionCount == 2, "the column rail shows the two drum sections", rail != null ? "sections " + rail.DrumSectionCount : "no rail");
+        // T (the owner: "BE SIMPLE AND MINIMALISTIC"): the rail draws no drum line any more — pills only (was: "the column rail shows the two drum sections")
+        string railSays = rail != null ? RailChecks.PillsOnly(rail) : "no rail";
+        Check(railSays == null, "the column rail stays pills only with two drum Moons in the song (no drum line, no Moon bead)", railSays ?? "pills " + rail.PillsShown + " = sections " + SM.SectionCount);
         if (SM.Moons.Count > 0)
         {
             yield return SeekPlaying(SM.ColumnStart(1) + 1.0f);

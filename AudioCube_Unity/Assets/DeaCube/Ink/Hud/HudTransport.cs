@@ -12,7 +12,7 @@ using UnityEngine.UI;
 /// range arc shows only while dragging. A metronome needle swings on the beat (click = metronome, filled bob = on). The beat is a row of
 /// mini cubes (the current one hops and turns cream, the downbeat one is bigger; click = beats per bar). A knob sticker opens the paper
 /// sound drawer upward: swing, key, tone, space, weather and volume as picture knobs with an ink arc for the value (names on hover).
-/// While playing, rubber punch pads (J K H B) sit above. v3 contract: HUD/Transport/Main/Tempo/Label (the digits), HUD/Transport/Punch.
+/// While playing, rubber punch pads (J K H B) sat above (Flow E2: no longer drawn — the keys remain). v3 contract: HUD/Transport/Main/Tempo/Label (the digits), HUD/Transport/Punch.
 /// </summary>
 public class HudTransport : MonoBehaviour
 {
@@ -27,6 +27,8 @@ public class HudTransport : MonoBehaviour
     public bool DrawerOpen => drawerOpen;
     public RectTransform Drawer => drawer;
     public RectTransform Punch => punch;
+    /// <summary>Flow E2: the punch-in pads are not drawn (the keys J K H B do the punch-ins).</summary>
+    public const bool PadsDrawn = false;
     public HoldButton Stutter => pads[0];
     public HoldButton Funnel => pads[1];
     public HoldButton Half => pads[2];
@@ -405,7 +407,9 @@ public class HudTransport : MonoBehaviour
     }
     public void OnTransport()
     {
-        HudKit.SetActive(punch, GlobalClock.IsPlaying);
+        // Flow E2 (a quiet world): the punch-in pads are no longer drawn — J K H B keep working (UIManager.UpdatePunch reads the keys; the pads
+        // stay built for it) and stay on the shortcut sheet
+        HudKit.SetActive(punch, PadsDrawn && GlobalClock.IsPlaying);
         if (playShown != GlobalClock.IsPlaying)
         {
             playShown = GlobalClock.IsPlaying; playArt.Repaint();

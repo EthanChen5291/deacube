@@ -518,14 +518,16 @@ public static class V6ChecksU1
             if (sp.z > 0f && sp.x >= 0f && sp.y >= 0f && sp.x <= Screen.width && sp.y <= Screen.height) onScreen++;
         }
         bool chipsOk = t.SwapJob == job && t.SwapIslands.Count == count[job] && t.SwapChipsShown == onScreen && onScreen > 0;
-        bool pulseOk = rail != null && rail.SwapJob == job && rail.PulsingCount == count[job];
+        // T (the owner: "BE SIMPLE AND MINIMALISTIC"): the rail no longer pulses the beads of that job (it has no beads): it stays pills only
+        string railSays = rail != null ? RailChecks.PillsOnly(rail) : "no rail";
+        bool pulseOk = rail != null && rail.SwapJob == job && railSays == null;
         Line(chipsOk, "hovering a card puts a ⇄ swap chip over every island doing the same job (screen space, following the camera)", "job " + job + ": islands " + count[job] + ", chips " + t.SwapChipsShown + " (on screen " + onScreen + ")");
-        Line(pulseOk, "…and those islands' rail beads pulse (HudColumnRail.SwapJob)", rail != null ? "pulsing " + rail.PulsingCount + " of " + count[job] : "no rail");
+        Line(pulseOk, "…and the rail stays as it is: pills only (it is told the job, HudColumnRail.SwapJob, and draws nothing for it)", railSays ?? "job " + rail.SwapJob + ", pills " + rail.PillsShown);
         yield return Wait(0.3f);
         yield return Shot("u1_6_swap.png");
         card.OnPointerExit(ev);
         yield return Wait(0.25f);
-        Line(t.SwapChipsShown == 0 && t.SwapJob == 0 && (rail == null || (rail.SwapJob == 0 && rail.PulsingCount == 0)), "the chips and the pulse leave with the pointer", "chips " + t.SwapChipsShown + ", pulsing " + (rail != null ? rail.PulsingCount : -1));
+        Line(t.SwapChipsShown == 0 && t.SwapJob == 0 && (rail == null || rail.SwapJob == 0), "the chips leave with the pointer", "chips " + t.SwapChipsShown + ", rail job " + (rail != null ? rail.SwapJob : -1));
         IslandTray.Close(); yield return Wait(0.3f);
     }
 
@@ -589,14 +591,15 @@ public static class V6ChecksU1
         Frame(kb.Center, 16f); yield return Wait(0.5f);
         IslandHeader.Show(kb);
         yield return Wait(0.45f);
+        if (!IslandHeader.MoreOpen) { h.More.onClick(); yield return Wait(0.3f); }   // Flow E2: extend rides in the ⋯ card
         var cb = h.Carry;
         var cap = cb != null ? cb.GetComponent<InkCaptionHover>() : null;
         float k0 = UIManager.I.Canvas != null ? Mathf.Max(0.01f, UIManager.I.Canvas.scaleFactor) : 1f;
         var corners = new Vector3[4]; float w = 0f, hh = 0f;
         if (cb != null) { ((RectTransform)cb.transform).GetWorldCorners(corners); w = Vector3.Distance(corners[0], corners[3]) / k0; hh = Vector3.Distance(corners[0], corners[1]) / k0; }
         // §21 (the user: "just keep cubes on each grid … the long grid"): the carry button is the EXTEND → control (one long grid) — was "carry to next chord"
-        Line(cb != null && cb.gameObject.activeInHierarchy && cap != null && cap.words == IslandHeader.ExtendCaptionOff && w >= 27.5f && hh >= 27.5f && Hints.Has("island.carry") && h.CarrySticker == "" && kb.carry == 0,
-             "header: the carry button is EXTEND → (§21: a grid stretched to the right, caption \"" + IslandHeader.ExtendCaptionOff + "\", ≥ 28 px, hint island.carry), plain at 0", "size " + w.ToString("F0") + "×" + hh.ToString("F0") + ", caption \"" + (cap != null ? cap.words : "") + "\"");
+        Line(cb != null && cb.gameObject.activeInHierarchy && h.InMore(cb) && cap != null && cap.words == IslandHeader.ExtendCaptionOff && w >= 27.5f && hh >= 27.5f && Hints.Has("island.carry") && h.CarrySticker == "" && kb.carry == 0,
+             "header: the carry button is EXTEND → in the ⋯ card (Flow E2; §21: a grid stretched to the right, caption \"" + IslandHeader.ExtendCaptionOff + "\", ≥ 28 px, hint island.carry), plain at 0", "size " + w.ToString("F0") + "×" + hh.ToString("F0") + ", caption \"" + (cap != null ? cap.words : "") + "\"");
         var seq = new List<string>(); bool okAll = true;
         for (int c = 0; c < 4; c++)
         {
@@ -643,7 +646,8 @@ public static class V6ChecksU1
         {
             Clipboard.Copy(src);
             yield return null; yield return null;
-            shown = h.PasteShown && Hints.IsVisible("island.paste");
+            if (!IslandHeader.MoreOpen) { h.More.onClick(); yield return Wait(0.3f); }   // Flow E2: paste here rides in the ⋯ card
+            shown = h.PasteShown && h.InMore(h.PasteHereButton) && Hints.IsVisible("island.paste");
             yield return Wait(0.3f);
             yield return Shot("u1_6_header_paste.png");
             int cubes0 = SequenceMaster.Cubes.Count, p0 = pushes;
@@ -654,7 +658,7 @@ public static class V6ChecksU1
             if (sm.Moons.Count > 0) { IslandHeader.Show(sm.Moons[0]); yield return Wait(0.3f); moonHidden = !h.PasteShown; }
             Clipboard.Clear();
         }
-        Line(hiddenEmpty && shown && moonHidden, "header \"paste here\": hidden with an empty clipboard, shown after a copy on a grid it fits (hint island.paste), hidden on a Moon for a pitched pattern", "empty hidden " + hiddenEmpty + ", shown " + shown + ", Moon hidden " + moonHidden);
+        Line(hiddenEmpty && shown && moonHidden, "header \"paste here\" (Flow E2: in the ⋯ card): not offered with an empty clipboard, offered after a copy on a grid it fits (hint island.paste), not on a Moon for a pitched pattern", "empty hidden " + hiddenEmpty + ", shown " + shown + ", Moon hidden " + moonHidden);
         IslandHeader.Hide(); yield return Wait(0.2f);
         // a keyboard island's header (package K's keyboards)
         LoadFixture(); yield return null;
@@ -691,21 +695,20 @@ public static class V6ChecksU1
         if (i >= 0) sm.SetCarry(i, 2);
         yield return null; yield return null;
         rail.CountNow();
-        int ok = 0, n = 0; var bad = new List<string>();
-        for (int k = 0; k < sm.Islands.Count; k++)
-        {
-            var kb = sm.Islands[k]; if (kb == null) continue;
-            n++;
-            int want = Harmony.Job(kb);
-            if (rail.BeadJob(k) == want && rail.BadgeShown(k) == want && rail.BeadKeyboard(k) == kb.IsKeyboard) ok++; else bad.Add(k + ": job " + rail.BeadJob(k) + "/" + rail.BadgeShown(k) + " want " + want);
-        }
-        Line(ok == n, "rail: every chord island's bead wears its job badge (keyboards and Moons none; a keyboard's bead is a piano strip)", ok + "/" + n + (bad.Count > 0 ? "; " + string.Join(", ", bad) : "") + (kbAt >= 0 ? ", keyboard bead " + kbAt : ", no keyboard (K not live)"));
-        // §21: a carry is a LONG GRID — one bar around its beads, no hops (was: "a small arc hops between beads, arcs = Σ CarryTargets")
-        // (§21, package K's runs: one bar per SongManager.LongGrids run — a chain of extends is one — and one of them starts at the extended grid)
+        // T (the owner: "BE SIMPLE AND MINIMALISTIC"): the rail is one pill per section — the section's colour and letter — and nothing per island
+        // (was: "every chord island's bead wears its job badge … a keyboard's bead is a piano strip")
+        string railSays = RailChecks.PillsOnly(rail);
+        bool lettered = rail.PillsShown == sm.SectionCount;
+        for (int s = 0; s < sm.SectionCount; s++) lettered &= rail.PillLetter(s) == SectionHeader.LetterOf(s) && rail.PillFirst(s) == sm.SectionFirst(s) && rail.PillColour(s) == SectionPlinth.LetterTint(rail.PillLetter(s));
+        Line(railSays == null && lettered, "rail: one pill per section in its letter's colour, nothing per island (no job badge, no keyboard strip) with a keyboard in the song",
+             (railSays ?? "pills " + rail.PillsShown + " = sections " + sm.SectionCount + ", islands " + sm.Islands.Count) + (kbAt >= 0 ? ", keyboard island " + kbAt : ", no keyboard (K not live)"));
+        // §21: a carry is a LONG GRID in the world (package K's SongManager.LongGrids: one run, starting at the extended grid) — the rail draws no
+        // bar for it any more (was: "a carry is one long-grid bar around its beads")
         int longs = sm.LongGrids.Count; bool fromI = false;
-        for (int k = 0; k < rail.LongGridCount; k++) if (rail.LongGridFrom(k) == i) fromI = true;
-        Line(i >= 0 && rail.CarryArcCount == 0 && rail.LongGridCount == longs && longs > 0 && fromI, "rail (§21): a carry is one long-grid bar around its beads, no hops between them",
-             "long grids " + rail.LongGridCount + " = " + longs + ", arcs " + rail.CarryArcCount + " (island " + i + " ×2, a bar from it " + fromI + ")");
+        foreach (var run in sm.LongGrids) if (run != null && run.Count >= 2 && i >= 0 && run[0] == sm.Islands[i]) fromI = true;
+        railSays = RailChecks.PillsOnly(rail);
+        Line(i >= 0 && longs > 0 && fromI && railSays == null, "§21: a carry is one long grid in the world (SongManager.LongGrids, from the extended grid); the rail stays pills only",
+             railSays ?? "long grids " + longs + " (island " + i + " ×2, a run from it " + fromI + "), pills " + rail.PillsShown);
         GlobalClock.Seek(sm.ColumnStart(Mathf.Max(0, sm.Islands[Mathf.Max(0, i)].column)) + 0.5f);
         GlobalClock.Play();
         yield return Wait(0.8f);
@@ -743,10 +746,12 @@ public static class V6ChecksU1
         IslandTray.Close(); yield return Wait(0.3f);
         // the rail: sections [2, 4) and [4, end); columns 0 and 1 have no percussion
         rail.CountNow();
-        bool secOk = rail.DrumSectionCount == 2 && rail.DrumSectionStart(0) == 2 && rail.DrumSectionEnd(0) == 4 && rail.DrumSectionStart(1) == 4 && rail.DrumSectionEnd(1) == sm.ColumnCount
-                     && !rail.HasDrums(0) && !rail.HasDrums(1) && rail.HasDrums(2) && rail.HasDrums(sm.ColumnCount - 1);
-        var secs = new List<string>(); for (int k = 0; k < rail.DrumSectionCount; k++) secs.Add(rail.DrumSectionStart(k) + "→" + rail.DrumSectionEnd(k));
-        Line(secOk, "rail: the drum sections — a line under the columns each Moon covers until the next Moon's start, a drum at each start, a gap where nothing drums", "sections " + string.Join(", ", secs) + ", drums at 0 " + rail.HasDrums(0) + ", 1 " + rail.HasDrums(1));
+        // T (the owner: "BE SIMPLE AND MINIMALISTIC"): the rail draws no drum line any more; the drum parts are SongManager's ([2, 4) and [4, end)) and
+        // the world's (was: "rail: the drum sections — a line under the columns each Moon covers …, a drum at each start")
+        bool secOk = m1 >= 0 && m2 >= 0 && sm.MoonStartColumn(m1) == 2 && sm.MoonEndColumn(m1) == 4 && sm.MoonStartColumn(m2) == 4 && sm.MoonEndColumn(m2) == sm.ColumnCount;
+        string moonRail = RailChecks.PillsOnly(rail);
+        Line(secOk && moonRail == null, "the drum parts: each Moon covers its columns until the next Moon's start (SongManager.MoonStartColumn / MoonEndColumn); the rail stays pills only (no drum line, no Moon bead)",
+             moonRail ?? "parts " + (m1 >= 0 ? sm.MoonStartColumn(m1) + "→" + sm.MoonEndColumn(m1) : "-") + ", " + (m2 >= 0 ? sm.MoonStartColumn(m2) + "→" + sm.MoonEndColumn(m2) : "-") + ", pills " + rail.PillsShown);
         if (OrbitCamera.I != null) OrbitCamera.I.FrameBounds(sm.SongBounds, 0.05f, true);
         yield return Wait(0.6f);
         yield return Shot("u1_6_rail_drums.png");

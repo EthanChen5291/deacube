@@ -24,6 +24,9 @@ using UnityEngine.Rendering;
 /// drawer or selected note before the inspector; Delete / Backspace with a strip note selected deletes that note (DeleteCurrent), the
 /// card's tear-off deletes the cube (DeleteCube).
 /// v7 (package U2): the Esc of an open shortcut sheet is the sheet's (the card stays).
+/// Flow E1 (2026-11-13): BACKSPACE deletes the note selected in the strip and nothing else (no note selected: a soft tick — it used to delete the
+/// whole cube); the DELETE key or the card's trash can deletes the cube (undo brings it back; no dialog). With a note selected S splits it in
+/// two and R turns its rest on / off. A SPAN cube's focus loop covers every column its melody walks through (it grows with the span).
 /// </summary>
 [DefaultExecutionOrder(200)]   // after OrbitCamera.LateUpdate: the proxy is posed against this frame's camera
 public class CubeInspector : MonoBehaviour
@@ -76,13 +79,20 @@ public class CubeInspector : MonoBehaviour
     public static void Close() { if (I != null) I.DoClose(false); }
     /// <summary>Closes at once (no flight): the menu / presentation / prompt took the screen, or a test.</summary>
     public static void CloseImmediate() { if (I != null) I.DoClose(true); }
-    /// <summary>The Delete / Backspace key while inspecting: the note selected in the rhythm strip is deleted (v4); with no note selected the
-    /// cube is (see <see cref="DeleteCube"/>).</summary>
+    /// <summary>The Delete / Backspace key while inspecting (PathManager's hotkeys call it). E1: BACKSPACE deletes the note selected in the rhythm
+    /// strip and only that — with no note selected it does nothing (a soft tick); the DELETE key (or a call with neither key down: a test, a
+    /// menu) deletes the cube (see <see cref="DeleteCube"/>).</summary>
     public static void DeleteCurrent()
     {
-        if (IsOpen && InspectorCard.DeleteSelectedNote()) return;
+        if (IsOpen && KeyShim.Down(KeyCode.Backspace) && !KeyShim.Down(KeyCode.Delete))
+        {
+            if (!InspectorCard.DeleteSelectedNote()) { BackspaceTicks++; AudioPool.UI(ProceduralAudio.Tick(), 0.25f, 0.8f); }
+            return;
+        }
         DeleteCube();
     }
+    /// <summary>E1 (tests): Backspaces that found no selected note (a soft tick, nothing deleted).</summary>
+    public static int BackspaceTicks { get; private set; }
 
     /// <summary>The card's tear-off: the proxy pops, the cube is deleted (one History entry), no return flight.</summary>
     public static void DeleteCube()
@@ -103,6 +113,27 @@ public class CubeInspector : MonoBehaviour
         var isl = c.Island;
         if (isl != null && !isl.IsMoon) return isl.column;
         return Mathf.Max(0, sm.LitColumn);   // a Moon cube plays in every column: the one playing (or parked) now
+    }
+
+    /// <summary>E1: the last column a span cube's melody walks through (its home column for a cube without a span, a Moon cube).</summary>
+    static int LastSpanColumn(AudioCube c, int col)
+    {
+        var sm = SongManager.I; var isl = c != null ? c.Island : null;
+        if (sm == null || isl == null || isl.IsMoon || c.span <= 0) return col;
+        sm.SpanTargets(c, spanScratch);   // (no allocation: this runs every frame while a span cube is inspected)
+        return spanScratch.Count > 0 && spanScratch[spanScratch.Count - 1] != null ? Mathf.Max(col, spanScratch[spanScratch.Count - 1].column) : col;
+    }
+    static readonly System.Collections.Generic.List<KeyBlock> spanScratch = new System.Collections.Generic.List<KeyBlock>(ProjectConfig.MaxCarry + 1);
+
+    /// <summary>E1: the focus loop follows a span that grew (or shrank) while the card is open — an insert that walked the melody on.</summary>
+    void SyncFocusLoop()
+    {
+        var c = current;
+        if (c == null || !FocusLoop.Active || FocusLoop.Phrase >= 0) return;
+        int col = FocusColumnOf(c);
+        if (col < 0 || FocusLoop.Column != col) return;
+        int last = LastSpanColumn(c, col);
+        if (FocusLoop.LastColumn != last) FocusLoop.Begin(col, last);
     }
 
     /// <summary>Tests: runs the inspector's input step once (Esc through KeyShim; the mouse as it is).</summary>
@@ -142,7 +173,7 @@ public class CubeInspector : MonoBehaviour
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { phase = Phase.Closed; current = null; I = null; }
+    static void ResetStatics() { phase = Phase.Closed; current = null; I = null; BackspaceTicks = 0; }
 
     // ------------------------------------------------------------------ state
     Camera cam;
@@ -228,7 +259,7 @@ public class CubeInspector : MonoBehaviour
         AudioPool.UI(ProceduralAudio.Whoosh(), 0.45f, 1.15f);
         int col = FocusColumnOf(c);
         LastFocusColumn = col;
-        if (col >= 0) FocusLoop.Begin(col);   // v4 (R4): the cube's column loops while it is inspected (it stays after closing until dismissed)
+        if (col >= 0) FocusLoop.Begin(col, LastSpanColumn(c, col));   // v4 (R4): the cube's column loops while it is inspected (it stays after closing until dismissed); E1: a span cube's whole chain
         Onboarding.Notify(Onboarding.Ev.CubeInspected);
     }
 
@@ -378,6 +409,7 @@ public class CubeInspector : MonoBehaviour
         if (phase == Phase.Opening || phase == Phase.Open)
         {
             if (current == null) { StartPop(false); return; }
+            SyncFocusLoop();
             HandleInput();
         }
     }
@@ -392,6 +424,12 @@ public class CubeInspector : MonoBehaviour
             bool others = PathGridView.AnyPopoverOpen || (UIManager.I != null && (UIManager.I.OpenRing != null || UIManager.I.WheelOpen));
             if (!others && InspectorCard.ConsumeEscape()) return;
             if (!ringOpenLast) { DoClose(false); return; }
+        }
+        // E1: with a note selected in the strip, S splits it in two and R turns its rest on / off (⌘S stays save)
+        if (!InputUtil.TypingInField && !InputUtil.Cmd && !HudShortcuts.OwnsKeysThisFrame && InspectorCard.NoteSelected)
+        {
+            if (KeyShim.Down(KeyCode.S)) InspectorCard.SplitSelectedNote();
+            if (KeyShim.Down(KeyCode.R)) InspectorCard.RestSelectedNote();
         }
         Step(new Ptr
         {

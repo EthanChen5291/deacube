@@ -147,6 +147,8 @@ public class CubeState
     public bool sphere;           // a SPHERE piece (DeaCube/SphereBody.cs): leaps to any tile, bounces and rolls; false = a cube
     // v9 (N, DeaCube/Nudge.cs)
     public int[] nudges;          // per node scale steps of the SONG KEY (−2..+2) the step plays above / below its tile ("higher" / "lower"); null / short = none
+    // Flow (F1, SPEC flow §1)
+    public int span;              // 0..ProjectConfig.MaxCarry: the cube walks on through the next `span` grids of its home grid's lane as ONE melody (0 = its own grid only: every older save)
 
     public static CubeState Clone(CubeState c) => new CubeState
     {
@@ -156,7 +158,8 @@ public class CubeState
         reverse = c.reverse, phase = c.phase, follow = c.follow, echo = c.echo, shimmer = c.shimmer, rider = c.rider, seed = c.seed, twinOf = c.twinOf, id = c.id,
         durs = c.durs == null ? null : (int[])c.durs.Clone(), voice = c.voice,
         layer = c.layer, bend = c.bend == null ? null : (int[])c.bend.Clone(), echoOf = c.echoOf, climb = c.climb, sphere = c.sphere,
-        nudges = c.nudges == null ? null : (int[])c.nudges.Clone()
+        nudges = c.nudges == null ? null : (int[])c.nudges.Clone(),
+        span = c.span
     };
 
     /// <summary>Sticker list for this cube: saved mods, or derived from the legacy rests.</summary>
@@ -295,6 +298,15 @@ public static class History
         if (undo.Count < 3) return;
         undo.RemoveAt(undo.Count - 2);
         OnChanged?.Invoke();
+    }
+
+    /// <summary>Flow (F2): takes the newest snapshots back down to <paramref name="count"/> and restores that state WITHOUT leaving them on the
+    /// redo stack — a gesture its own owner took back (a drawn run Backspaced away, with the grid it had made): there is nothing to redo.</summary>
+    public static void Rewind(int count)
+    {
+        if (count < 1 || undo.Count <= count) return;
+        undo.RemoveRange(count, undo.Count - count);
+        Restore(undo[undo.Count - 1]);
     }
 
     public static void Undo()

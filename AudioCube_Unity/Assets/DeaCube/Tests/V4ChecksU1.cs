@@ -280,13 +280,20 @@ public static class V4ChecksU1
 
         // ---- 1. hit targets at rest
         {
-            var names = new List<string>();
-            int n = CountTargets(names);
-            // v9: an instrument cube per group (11 with fx) and the cube / sphere switch (two halves of one control, like the rail's beads)
-            int nAdj = n - (names.Contains("Cube") && names.Contains("Ball") ? 1 : 0);
-            Line(nAdj >= 16 && nAdj <= 14 + Instruments.Count, "hit targets at rest ≈ 20 (the rail's beads and the cube / sphere switch count as one control each, an instrument cube per group counts)", nAdj + " (" + n + "): " + string.Join(", ", names));
-            int beads = ui.Rail != null ? ui.Rail.BeadCount : -1;
-            Line(beads == sm.Islands.Count && ui.PillCount == sm.Islands.Count, "the column rail: one bead per island (PillCount)", "beads " + beads + ", islands " + sm.Islands.Count);
+            // Flow E2 (the owner: "information is too condensed … BE SIMPLE AND MINIMALISTIC"; the rule: each surface shows the three to five things
+            // people use all the time, the rest behind one "more"): the old count of every target on screen (≈ 20, then ≤ 14 + a cube per instrument
+            // group) became the rule itself — at rest NO SURFACE of the HUD shows more than five controls. The instrument palette is one list (a
+            // cube per group, like the rail's pills) beside its mix and its cube / sphere switch (two halves of one control).
+            var names = new List<string>(); var per = new SortedDictionary<string, int>();
+            int n = CountTargets(names), controls = RestSurfaces(per), worst = 0; string worstName = "";
+            foreach (var kv in per) if (kv.Value > worst) { worst = kv.Value; worstName = kv.Key; }
+            var parts = new List<string>(); foreach (var kv in per) parts.Add(kv.Key + " " + kv.Value);
+            Line(per.Count >= 4 && worst <= 5 && controls >= 12 && controls <= 22,
+                 "hit targets at rest (Flow E2): no surface shows more than five controls (the instrument palette is one list — a cube per group —, the rail's pills and the cube / sphere switch count as one control each); about 20 in all",
+                 controls + " controls on " + per.Count + " surfaces (most: " + worstName + " " + worst + "): " + string.Join(", ", parts) + " — " + n + " raw targets: " + string.Join(", ", names));
+            // T (the owner: "BE SIMPLE AND MINIMALISTIC"): the rail is one pill per section now (was: one bead per island)
+            int pills = ui.Rail != null ? ui.Rail.PillsShown : -1;
+            Line(pills == sm.SectionCount && ui.PillCount == sm.SectionCount, "the column rail: one pill per section (PillCount)", "pills " + pills + ", sections " + sm.SectionCount + ", islands " + sm.Islands.Count);
         }
         // ---- 2. captions on every icon-only control
         {
@@ -366,6 +373,34 @@ public static class V4ChecksU1
             if (names != null) names.Add(g.gameObject.name);
         }
         return n;
+    }
+
+    /// <summary>Flow E2: the controls each SURFACE of the HUD shows at rest (the HUD root's child a target lives under), as a player counts
+    /// them: the instrument cubes are one list, the rail's pills one control, the cube / sphere switch one. Returns the total; the same filter
+    /// as <see cref="CountTargets"/> (raycast targets that are controls, visible, on screen).</summary>
+    public static int RestSurfaces(IDictionary<string, int> per)
+    {
+        var ui = UIManager.I; if (ui == null) return -1;
+        var hud = ui.HudRoot;
+        var seen = new HashSet<GameObject>(); var once = new HashSet<string>();
+        int total = 0;
+        foreach (var g in hud.GetComponentsInChildren<Graphic>(false))
+        {
+            if (!g.raycastTarget || !g.gameObject.activeInHierarchy || !g.enabled) continue;
+            if (!IsControl(g.gameObject)) continue;
+            if (Hints.EffectiveAlpha(g.rectTransform) < 0.5f || !BlocksRaycasts(g.transform)) continue;
+            Rect r; if (!OnScreen(g.rectTransform, out r)) continue;
+            if (r.width > Screen.width * 0.8f && r.height > Screen.height * 0.8f) continue;
+            if (!seen.Add(g.gameObject)) continue;
+            Transform t = g.transform; while (t.parent != null && t.parent != hud.transform) t = t.parent;
+            string surface = t.name, path = PathOf(g.transform);
+            // (a hovered instrument's voice fan — the real pointer may rest on the palette during a run — is one list too: its sounds)
+            string list = path.Contains("/Rail/Beads/") ? "Rail:pills" : (path.Contains("/Palette/") && g.gameObject.name.StartsWith("Voice") ? "Palette:voices"
+                        : (path.Contains("/Palette/Inst") ? "Palette:instruments" : (path.Contains("/Palette/Shape/") ? "Palette:shape" : null)));
+            if (list != null && !once.Add(list)) continue;
+            int k; per.TryGetValue(surface, out k); per[surface] = k + 1; total++;
+        }
+        return total;
     }
 
     // ------------------------------------------------------------------ hit sizes
@@ -730,7 +765,7 @@ public static class V4ChecksU1
         yield return null;
         Line(hadGhost && at >= 0 && sm.Islands.Count == n0 + 1 && History.UndoCount == h0 + 1 && !WorldInput.IsLockedBy("tray"), "deck: a card dragged onto the sea is placed through the ghost (IslandGhost.Snapshot / Place), one History entry, the tray's lock released",
              "ghost " + mode + ", placed at " + at + ", islands " + n0 + " → " + sm.Islands.Count + ", history +" + (History.UndoCount - h0) + ", locks " + WorldInput.Describe());
-        Line(ghostCol >= 0 && kind.Length > 0, "the column rail previews the drop slot while a card is dragged", "ghost bead " + kind + " at column " + ghostCol);
+        Line(ghostCol >= 0 && kind.Length > 0, "the column rail previews the drop slot while a card is dragged", "dotted slot " + kind + " at column " + ghostCol);
         // a click places after the focused island
         t.RebuildNow();
         UIManager.I.SelectMeasure(0, false);

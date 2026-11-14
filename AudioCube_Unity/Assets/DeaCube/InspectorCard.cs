@@ -32,13 +32,23 @@ using UnityEngine.UI;
 /// the pattern lands on the next grid in that mode (Clipboard.PasteNext(mode)); a plain click stays the v6 paste.
 /// v7 §21 ("just keep cubes on each grid"): the RIDER card is retired — a cube never leaves its grid, a saved rider plays on its own grid like
 /// any cube — so the drawer's second row is stamp + octave, centred under the first.
+/// Flow E1 (2026-11-13, the owner: "BE SIMPLE AND MINIMALISTIC … information is too condensed"): the card answers ONE question — what are this
+/// cube's notes, and let me change them. AT REST it shows only the instrument chip, the volume line, the flat grid, the rhythm strip, the size
+/// row (the five sizes + the rest cube: the size of the NEXT note, or the selected note's), a trash can (delete the cube), the close ✕ and one
+/// "more" ⋯. Everything else lives in the ⋯ drawer as a calm grid of icons in three groups set apart by space: PATH (redraw, reverse, the three
+/// modes), COPIES (copy, paste → next grid, flip, climb, octave copy ↑ ↓, harmony ↑ ↓), DEVICES (twin, shadow, echo, stamp, octave ↑ ↓, gate ×3).
+/// The legacy necklace and the pace row are gone from the UI (a legacy cube bakes on its first rhythm edit; the [ ] − = keys stay wired in
+/// UIManager). With a note selected, higher / lower and ONE scissors (split: the note becomes two halves on its tile) show left of the size row.
+/// Delete is a trash can everywhere (cube: the red corner; note: the tear-off on its block); ✕ only closes.
 /// </summary>
 [DefaultExecutionOrder(210)]   // after CubeInspector (200): the proxy is posed for this frame
 public class InspectorCard : MonoBehaviour
 {
     // ------------------------------------------------------------------ layout (1920 x 1080 reference units)
-    public const float W = 560f, Pad = 24f, HeaderTop = 18f, HeaderH = 58f, GridGap = 10f, ToolsH = 48f, RowH = 80f, BottomPad = 24f;
-    public const float TailGap = 58f, DrawerW = 380f, TopMargin = 78f, BottomMargin = 20f, Tilt = -1f, ChipPx = 44f, FaderW = 180f;
+    public const float W = 560f, Pad = 24f, HeaderTop = 18f, HeaderH = 58f, GridGap = 10f, RowH = 80f, BottomPad = 24f;
+    public const float TailGap = 58f, DrawerW = 396f, TopMargin = 78f, BottomMargin = 20f, Tilt = -1f, ChipPx = 44f, FaderW = 180f;
+    /// <summary>E1: the drawer's icon grid — column / row pitch, the gap between its three groups (path · copies · devices), an icon's hit size.</summary>
+    public const float IconPitchX = 66f, IconPitchY = 62f, IconGroupGap = 24f, IconHit = 56f, DrawerPadTop = 22f, IconScale = 1.2f;
     const float AppearAt = 0.3f;   // the card pops in this far into the proxy's flight
     const string ClosePopoverId = "u2.pop";
 
@@ -81,27 +91,26 @@ public class InspectorCard : MonoBehaviour
 
     // ------------------------------------------------------------------ parts
     bool built;
-    RectTransform card, lengthSlot, popLayer, drawer, drawerBody, legacyRt;
-    // v9 (N): the selected note's nudge — "higher" ▲ / "lower" ▼ at the left of the length row (DeaCube/Nudge.cs)
-    RectTransform nudgeRt; InkButton nudgeUp, nudgeDown; InkPath nudgeUpArt, nudgeDownArt; int nudgeShownNode = -2, nudgeShown = int.MinValue;
-    public const float NudgeX = -206f, NudgeBtnW = 72f, NudgeBtnH = 36f;
+    RectTransform card, lengthSlot, popLayer, drawer, drawerBody;
+    // v9 (N): the selected note's nudge — "higher" ▲ / "lower" ▼ at the left of the size row (DeaCube/Nudge.cs); E1: the scissors beside them
+    RectTransform nudgeRt; InkButton nudgeUp, nudgeDown, splitBtn; InkPath nudgeUpArt, nudgeDownArt; int nudgeShownNode = -2, nudgeShown = int.MinValue;
+    public const float NudgeX = -230f, NudgeBtnW = 44f, NudgeBtnH = 34f, SplitX = -182f;
     InkShape paper, drawerPaper;
     CanvasGroup cardGroup, drawerGroup;
     PathGridView grid; RhythmStrip strip;
     InkButton chip, closeBtn, delBtn, pencilBtn, reverseBtn, moreTab;
     readonly InkButton[] modeBtns = new InkButton[3];
     readonly InkPath[] modeArt = new InkPath[3];
-    InkWave modeWave;
-    CubeGlyph chipCube; InkShape pencilBack; InkPath pencilArt, reverseArt, lengthGhost;
+    CubeGlyph chipCube; InkShape pencilBack; InkPath pencilArt, reverseArt;
     HudSlider fader; RectTransform faderRt; InkPath faderFill; InkShape knob;
     // drawer
     InkButton twinCard, shadowCard, echoCard, stampCard, octUp, octDown;
     readonly InkButton[] gateBtns = new InkButton[3];
-    readonly InkButton[] paceBtns = new InkButton[5];
-    readonly CubeGlyph[] paceCubes = new CubeGlyph[5];
+    readonly InkPath[] gateArt = new InkPath[3];
     readonly List<CubeGlyph> tinted = new List<CubeGlyph>();   // drawer cubes in the cube's colour
-    readonly CubeGlyph[] shadowCopies = new CubeGlyph[3], echoCopies = new CubeGlyph[2];
-    InkPath ladder, shimmerArt; InkWave gateWave; NecklaceDial dial;
+    readonly CubeGlyph[] shadowCopies = new CubeGlyph[3];
+    InkPath shimmerArt, echoArt, stampArt, twinArt, octUpArt, octDownArt;
+    readonly Dictionary<InkButton, InkWave> onMarks = new Dictionary<InkButton, InkWave>();   // E1: the wavy underline of a drawer icon that is on
     // popovers
     RectTransform instPop, twinPop; InkShape instPopPaper, twinPopPaper;
     readonly CubeGlyph[] instCubes = new CubeGlyph[Instruments.Count];
@@ -119,10 +128,9 @@ public class InspectorCard : MonoBehaviour
     InkWave voiceWave; int voiceN;
     static bool pastePending; static float pasteAskedT;
     // v7: the ideas row (octave copy ↑ / ↓, harmony ↑ / ↓, flip) and the paste fan on paste → next grid
-    RectTransform ideasRt, octRt, harmRt;
     InkButton octCopyUp, octCopyDown, harmUp, harmDown, flipBtn, climbBtn;
-    CubeGlyph octCube, octGhostUp, octGhostDown, harmCube, harmUpCube, harmDownCube;
-    InkPath octMarks, harmTies, flipArt, climbArt;
+    CubeGlyph octCubeUp, octCubeDown, octGhostUp, octGhostDown;
+    InkPath octMarkUp, octMarkDown, harmArtUp, harmArtDown, flipArt, climbArt;
     PasteFan pasteFan;
     InkPainter harmGhost; CubeOps.HarmonyPlan ghostPlan; Color ghostCol;
     static Clipboard.PasteMode pendingMode;
@@ -134,7 +142,6 @@ public class InspectorCard : MonoBehaviour
     Vector2 lastTip = new Vector2(float.NaN, float.NaN);
     AudioCube spotCube; bool chipHold;
     int popOpenedFrame = -9;
-    static readonly StepLen[] PaceOrder = { StepLen.Half, StepLen.Quarter, StepLen.Eighth, StepLen.Triplet, StepLen.Sixteenth };
     static readonly Vector3[] corners = new Vector3[4];
     static readonly float[] PopIn = { 0.62f, 0.9f, 1.06f, 1f }, PopOut = { 0.55f, 0.72f, 0.9f, 1f };
 
@@ -170,23 +177,10 @@ public class InspectorCard : MonoBehaviour
         harmGhost.gameObject.SetActive(false);
         strip = RhythmStrip.Create(card);
         strip.OnNoteSelected += HandleNoteSelected;
-        BuildTools();
-        lengthSlot = InkUI.Node("LengthSlot", card);
-        // the empty state (no note selected): a dotted shelf with the five lengths as faint ghost cubes — select a note to size it
-        lengthGhost = InkPath.Create(lengthSlot, "EmptyShelf", new Vector2(260f, 60f));
-        lengthGhost.UnitPx = 1f; lengthGhost.Wobble = 0.4f;
-        for (float x = -120f; x < 120f; x += 13f) lengthGhost.Line(Palette.A(InkUI.Ink, 0.28f), 2f, new Vector2(x, -20f), new Vector2(x + 6f, -20f));
-        float gx = -101f;
-        for (int i = 0; i < 5; i++)
-        {
-            float px = DurationPicker.SlotPx(i);
-            var g = CubeGlyph.Create(lengthGhost.transform, "Ghost" + i, Palette.A(InkUI.Ink, 0.3f), px);
-            g.raycastTarget = false; g.Hollow = true;
-            ((RectTransform)g.transform).anchoredPosition = new Vector2(gx + px * 0.5f, -20f + px * 0.5f + 1f);
-            gx += px + DurationPicker.Gap;
-        }
-        lengthGhost.gameObject.SetActive(false);          // v7: the ideas row is the slot's resting state (the length row replaces it for a note)
-        BuildIdeas();
+        // E1: a note inserted on the flat grid becomes the selected one (clicks keep inserting in order); an appended one keeps its grid in view
+        grid.onInserted = n => { if (strip != null) strip.SelectAfterEdit(n); };
+        grid.onAppended = n => { if (strip != null) strip.PickPartOfNode(n); };
+        lengthSlot = InkUI.Node("LengthSlot", card);   // E1: the size row lives here always (DurationPicker docks in it); the selected note's tools at its left
         BuildNudge();
         BuildCorners();
         popLayer = InkUI.Node("Popovers", root);          // above the card, not tilted
@@ -211,64 +205,15 @@ public class InspectorCard : MonoBehaviour
         Hints.Register("inspector.close", closeBtn);
         Hints.Register("inspector.swatches", chip);
         Hints.Register("inspector.rhythm", strip);
-        Hints.Register("inspector.necklace", dial != null && !IsDurations ? (Component)dial : moreTab);
-        Hints.Register("inspector.octave", octRt);
-        Hints.Register("inspector.harmony", harmRt);
-        Hints.Register("inspector.flip", flipBtn);
-        Hints.Register("inspector.paste", pasteBtn);
+        // E1: these live in the ⋯ drawer — a tip points at the icon while the drawer is out, else at "more" (the necklace left the UI)
+        Hints.Register("inspector.necklace", moreTab);
+        Hints.Register("inspector.octave", drawerOpen ? octCopyUp : moreTab);
+        Hints.Register("inspector.harmony", drawerOpen ? harmUp : moreTab);
+        Hints.Register("inspector.flip", drawerOpen ? flipBtn : moreTab);
+        Hints.Register("inspector.paste", drawerOpen ? pasteBtn : moreTab);
     }
 
-    // ------------------------------------------------------------------ v7 the ideas row: octave copy ↑ / ↓, harmony ↑ / ↓, flip
-    public const float IdeaGroupW = 84f, IdeaHalfH = 38f, IdeaSpread = 122f;   // (the pitch between the four groups: octave, harmony, flip, climb)
-
-    void BuildIdeas()
-    {
-        ideasRt = InkUI.Node("Ideas", lengthSlot);
-        InkUI.Stretch(ideasRt);
-        // octave copy: the cube, a glass ghost above (the sky layer: up and back) and one below (the deep layer: down and toward you)
-        octRt = InkUI.Node("OctaveCopy", ideasRt);
-        InkUI.Centre(octRt, new Vector2(-1.5f * IdeaSpread, 0f), new Vector2(IdeaGroupW, 2f * IdeaHalfH));
-        octMarks = InkPath.Create(octRt, "Marks", new Vector2(IdeaGroupW, 2f * IdeaHalfH));
-        octMarks.UnitPx = 1f; octMarks.Wobble = 0.5f; octMarks.Seed = 7811;
-        octGhostUp = IdeaCube(octRt, "GhostUp", new Vector2(9f, 24f), 25f);
-        octCube = IdeaCube(octRt, "Cube", new Vector2(0f, 0f), 30f);
-        octGhostDown = IdeaCube(octRt, "GhostDown", new Vector2(-9f, -24f), 25f);
-        octCopyUp = IdeaHalf(octRt, "Up", true, "octave copy up");
-        octCopyDown = IdeaHalf(octRt, "Down", false, "octave copy down");
-        octCopyUp.onClick = () => OctaveCopyClick(1);
-        octCopyDown.onClick = () => OctaveCopyClick(-1);
-        octCopyUp.onHover = on => IdeaHover(octGhostUp, on, true);
-        octCopyDown.onHover = on => IdeaHover(octGhostDown, on, true);
-        // harmony: the cube with a smaller partner above and below (a duet), a slur joining each
-        harmRt = InkUI.Node("Harmony", ideasRt);
-        InkUI.Centre(harmRt, new Vector2(-0.5f * IdeaSpread, 0f), new Vector2(IdeaGroupW, 2f * IdeaHalfH));
-        harmTies = InkPath.Create(harmRt, "Ties", new Vector2(IdeaGroupW, 2f * IdeaHalfH));
-        harmTies.UnitPx = 1f; harmTies.Wobble = 0.5f; harmTies.Seed = 7813;
-        harmUpCube = IdeaCube(harmRt, "PartnerUp", new Vector2(14f, 23f), 21f);
-        harmCube = IdeaCube(harmRt, "Cube", new Vector2(-9f, 0f), 30f);
-        harmDownCube = IdeaCube(harmRt, "PartnerDown", new Vector2(14f, -23f), 21f);
-        harmUp = IdeaHalf(harmRt, "Above", true, "harmony above");
-        harmDown = IdeaHalf(harmRt, "Below", false, "harmony below");
-        harmUp.onClick = () => HarmonyClick(true);
-        harmDown.onClick = () => HarmonyClick(false);
-        harmUp.onHover = on => HarmonyHover(true, on);
-        harmDown.onHover = on => HarmonyHover(false, on);
-        // flip: the pattern over a mirror line and its mirror image
-        flipBtn = InkButton.Create(ideasRt, "Flip", new Vector2(72f, 76f), "flip upside down");
-        InkUI.Centre((RectTransform)flipBtn.transform, new Vector2(0.5f * IdeaSpread, 0f), new Vector2(72f, 76f));
-        flipArt = flipBtn.AddDrawing(new Vector2(68f, 72f));
-        flipArt.UnitPx = 1f; flipArt.Wobble = 0.6f; flipArt.Seed = 7817;
-        flipBtn.hoverScale = 1.1f;
-        flipBtn.onClick = FlipClick;
-        // climb (DeaCube/Climb.cs): the path's high note reaches higher — off → ×1 → ×2 → ×3 → off (the pips)
-        climbBtn = InkButton.Create(ideasRt, "Climb", new Vector2(72f, 76f), Climb.Caption(0));
-        InkUI.Centre((RectTransform)climbBtn.transform, new Vector2(1.5f * IdeaSpread, 0f), new Vector2(72f, 76f));
-        climbArt = climbBtn.AddDrawing(new Vector2(68f, 72f));
-        climbArt.UnitPx = 1f; climbArt.Wobble = 0.6f; climbArt.Seed = 7819;
-        climbBtn.hoverScale = 1.1f;
-        climbBtn.onClick = ClimbClick;
-    }
-
+    // ------------------------------------------------------------------ v7 the cube ideas (E1: icons of the ⋯ drawer's "copies" group)
     /// <summary>CLIMB: the inspected path's high notes reach higher (Climb.Set, one History entry): off → ×1 → ×2 → ×3 → off.</summary>
     void ClimbClick()
     {
@@ -282,47 +227,12 @@ public class InspectorCard : MonoBehaviour
         lookSig = int.MinValue;
     }
 
-    /// <summary>The climb picture: a little path whose top bead climbs to a higher one (an up arrow between), pips for the level.</summary>
-    void DrawClimb(Color col, int level)
-    {
-        if (climbArt == null) return;
-        Color c = Comic.Opaque(col), faint = Palette.A(InkUI.Ink, 0.5f);
-        climbArt.Clear();
-        Vector2 a0 = new Vector2(-24f, -12f), a1 = new Vector2(-13f, 0f), a2 = new Vector2(-3f, -8f), a3 = new Vector2(9f, 2f), up = new Vector2(9f, 24f);
-        climbArt.Line(InkUI.Ink, 4.4f, a0, a1, a2, a3).Line(c, 2.4f, a0, a1, a2, a3);
-        climbArt.Dot(InkUI.Ink, a0, 3.5f).Dot(InkUI.Ink, a1, 3.5f).Dot(InkUI.Ink, a2, 3.5f).Dot(InkUI.Ink, a3, 3.5f);
-        climbArt.Dot(c, a0, 2.2f).Dot(c, a1, 2.2f).Dot(c, a2, 2.2f).Dot(c, a3, 2.2f);
-        Color arrow = level > 0 ? InkUI.Ink : faint;
-        climbArt.Line(arrow, 2f, a3 + new Vector2(0f, 5f), up - new Vector2(0f, 9f));
-        InkDraw.ArrowHead(climbArt, arrow, 2f, up - new Vector2(0f, 6f), new Vector2(0f, 1f), 5f);
-        climbArt.Dot(arrow, up, 4.4f).Dot(level > 0 ? Comic.Pop : InkUI.Paper, up, 3f);
-        for (int k = 0; k < Climb.MaxLevel; k++) { var pip = new Vector2(-10f + k * 10f, -28f); climbArt.Dot(InkUI.Ink, pip, 2.8f).Dot(k < level ? Comic.Pop : InkUI.Paper, pip, 1.7f); }
-    }
-
-    CubeGlyph IdeaCube(Transform parent, string name, Vector2 pos, float px)
-    {
-        var g = CubeGlyph.Create(parent, name, Color.white, px);
-        g.raycastTarget = false;
-        ((RectTransform)g.transform).anchoredPosition = pos;
-        return g;
-    }
-
-    /// <summary>The upper / lower half of an idea's picture as its own hit area (a transparent InkButton).</summary>
-    static InkButton IdeaHalf(RectTransform parent, string name, bool upper, string caption)
-    {
-        var b = InkButton.Create(parent, name, new Vector2(IdeaGroupW, IdeaHalfH), caption);
-        InkUI.Centre((RectTransform)b.transform, new Vector2(0f, upper ? IdeaHalfH * 0.5f : -IdeaHalfH * 0.5f), new Vector2(IdeaGroupW, IdeaHalfH));
-        b.hoverScale = 1f; b.pressOffset = Vector2.zero;
-        return b;
-    }
-
-    /// <summary>A hovered half: its ghost fills and hops, its arrow inks in (the picture says which way the copy goes).</summary>
-    void IdeaHover(CubeGlyph g, bool on, bool ghost)
+    /// <summary>A hovered octave-copy icon: its glass ghost fills and hops (the picture says which way the copy goes).</summary>
+    void IdeaHover(CubeGlyph g, bool on)
     {
         if (g == null) return;
-        if (ghost) PaintGhost(g, on || (g == octGhostUp ? upExists : downExists));
+        PaintGhost(g, on || (g == octGhostUp ? upExists : downExists));
         if (on) InkUI.Hop(g, 0.3f);
-        DrawIdeaMarks();
     }
 
     /// <summary>An octave ghost: glass (the cube's colour washed out, a soft ink) at rest; solid once its copy exists or while hovered.</summary>
@@ -373,50 +283,14 @@ public class InspectorCard : MonoBehaviour
         return false;
     }
 
-    void DrawIdeaMarks()
-    {
-        if (octMarks == null) return;
-        Color col = cube != null ? Comic.Opaque(cube.Color) : Palette.Accent;
-        bool upOn = octCopyUp != null && octCopyUp.Hovered, dnOn = octCopyDown != null && octCopyDown.Hovered;
-        octMarks.Clear();
-        // thin glass threads from the cube to its ghosts, and a chevron beside each (inked while its half is hovered)
-        octMarks.Line(Palette.A(col, 0.7f), 1.6f, new Vector2(3f, 12f), new Vector2(7f, 16f)).Line(Palette.A(col, 0.7f), 1.6f, new Vector2(-3f, -12f), new Vector2(-7f, -16f));
-        octMarks.Line(upOn ? InkUI.Ink : Palette.A(InkUI.Ink, 0.4f), 2.6f, new Vector2(27f, 16f), new Vector2(33f, 24f), new Vector2(39f, 16f));
-        octMarks.Line(dnOn ? InkUI.Ink : Palette.A(InkUI.Ink, 0.4f), 2.6f, new Vector2(-39f, -16f), new Vector2(-33f, -24f), new Vector2(-27f, -16f));
-        bool hu = harmUp != null && harmUp.Hovered, hd = harmDown != null && harmDown.Hovered;
-        harmTies.Clear();
-        harmTies.Arc(hu ? InkUI.Ink : Palette.A(InkUI.Ink, 0.5f), hu ? 2.6f : 1.8f, new Vector2(2f, 10f), 12f, 190f, 80f, 8);
-        harmTies.Arc(hd ? InkUI.Ink : Palette.A(InkUI.Ink, 0.5f), hd ? 2.6f : 1.8f, new Vector2(2f, -10f), 12f, 170f, 280f, 8);
-    }
-
-    void DrawFlip(Color col)
-    {
-        if (flipArt == null) return;
-        Color c = Comic.Opaque(col), faint = Color.Lerp(c, InkUI.Paper, 0.45f);
-        flipArt.Clear();
-        // the mirror line (dashed), the pattern above it, its mirror image below, a ↕ on the side
-        for (float x = -24f; x < 20f; x += 8f) flipArt.Line(Palette.A(InkUI.Ink, 0.6f), 1.6f, new Vector2(x, 0f), new Vector2(x + 4.5f, 0f));
-        Vector2 a0 = new Vector2(-18f, 6f), a1 = new Vector2(-8f, 20f), a2 = new Vector2(3f, 10f), a3 = new Vector2(12f, 25f);
-        flipArt.Line(InkUI.Ink, 4.4f, a0, a1, a2, a3).Line(c, 2.4f, a0, a1, a2, a3);
-        flipArt.Dot(InkUI.Ink, a0, 3.5f).Dot(InkUI.Ink, a1, 3.5f).Dot(InkUI.Ink, a2, 3.5f).Dot(InkUI.Ink, a3, 3.5f);
-        flipArt.Dot(c, a0, 2.2f).Dot(c, a1, 2.2f).Dot(c, a2, 2.2f).Dot(c, a3, 2.2f);
-        Vector2 b0 = new Vector2(a0.x, -a0.y), b1 = new Vector2(a1.x, -a1.y), b2 = new Vector2(a2.x, -a2.y), b3 = new Vector2(a3.x, -a3.y);
-        flipArt.Line(Palette.A(InkUI.Ink, 0.55f), 3.8f, b0, b1, b2, b3).Line(faint, 2f, b0, b1, b2, b3);
-        flipArt.Dot(Palette.A(InkUI.Ink, 0.55f), b0, 3.1f).Dot(Palette.A(InkUI.Ink, 0.55f), b1, 3.1f).Dot(Palette.A(InkUI.Ink, 0.55f), b2, 3.1f).Dot(Palette.A(InkUI.Ink, 0.55f), b3, 3.1f);
-        flipArt.Dot(faint, b0, 1.9f).Dot(faint, b1, 1.9f).Dot(faint, b2, 1.9f).Dot(faint, b3, 1.9f);
-        flipArt.Line(InkUI.Ink, 2f, new Vector2(24f, -16f), new Vector2(24f, 16f));
-        InkDraw.ArrowHead(flipArt, InkUI.Ink, 2f, new Vector2(24f, 19f), new Vector2(0f, 1f), 5f);
-        InkDraw.ArrowHead(flipArt, InkUI.Ink, 2f, new Vector2(24f, -19f), new Vector2(0f, -1f), 5f);
-    }
-
     /// <summary>The ideas made from the card (octave copies, harmonies, flips; tests) and the last cube one made.</summary>
     public static int IdeaCount { get; private set; }
     public static AudioCube LastIdea { get; private set; }
     /// <summary>Harmony previews the card started (tests) and whether one runs now.</summary>
     public static int PreviewCount { get; private set; }
     public static bool HarmonyPreviewing => I != null && I.harmPreviewing;
-    /// <summary>The ideas row is up (no note selected).</summary>
-    public static bool IdeasShown => I != null && I.ideasRt != null && I.ideasRt.gameObject.activeInHierarchy;
+    /// <summary>E1: the cube ideas (octave copy, harmony, flip, climb) are on screen — they are icons of the ⋯ drawer, so: the drawer is out.</summary>
+    public static bool IdeasShown => I != null && I.drawerOpen && I.drawerT > 0.98f;
 
     /// <summary>An octave copy of the inspected cube into the layer above (+1) / below (−1): CubeOps.OctaveCopy (one History entry).</summary>
     void OctaveCopyClick(int dir)
@@ -434,7 +308,6 @@ public class InspectorCard : MonoBehaviour
 
     void HarmonyHover(bool above, bool on)
     {
-        IdeaHover(above ? harmUpCube : harmDownCube, on, false);
         if (on) { harmHover = above ? 1 : -1; harmHoverT = Time.unscaledTime; }
         else if (harmHover == (above ? 1 : -1)) { harmHover = 0; EndHarmonyPreview(); }
     }
@@ -477,7 +350,7 @@ public class InspectorCard : MonoBehaviour
         var made = CubeOps.Harmonize(c, above);
         if (made == null) return;
         IdeaCount++; LastIdea = made;
-        InkUI.Hop(above ? harmUpCube : harmDownCube, 0.6f);
+        Pop(above ? harmUp : harmDown);
         Onboarding.Notify(Onboarding.Ev.HarmonyAdded);
         lookSig = int.MinValue;
     }
@@ -547,18 +420,11 @@ public class InspectorCard : MonoBehaviour
         chipMark = mk.gameObject.AddComponent<InkPainter>(); chipMark.raycastTarget = false;
         chipMark.onPaint = p => { var c = cube; if (c == null) return; Rect r = p.Area; VoiceMark.Paint(p, r.center, Mathf.Min(r.width, r.height), ShownVoice(c), InkUI.Ink); };
 
-        // v6: copy (two paper cards, the front one carrying the pattern) and paste → next grid (the pattern hops along an arc onto the next grid)
-        copyBtn = InkButton.Create(card, "Copy", new Vector2(48f, 46f), "copy");
-        copyArt = copyBtn.AddDrawing(new Vector2(44f, 42f));
-        copyBtn.onClick = CopyClick;
-        copyBtn.hoverScale = 1.12f;
-        pasteBtn = InkButton.Create(card, "PasteNext", new Vector2(60f, 48f), "paste on the next grid");
-        pasteArt = pasteBtn.AddDrawing(new Vector2(58f, 46f));
-        pasteBtn.onClick = PasteNextClick;
-        pasteBtn.hoverScale = 1.12f;
-        // v7: hovering it (or a right-click) fans the paste modes
-        pasteBtn.onHover = on => { pasteHoverT = on ? Time.unscaledTime : -1f; };
-        pasteBtn.onRightClick = () => OpenPasteFan(false);
+        // E1: the ONE "more" — three ink dots at the header's right; it pulls the drawer out of the card's right edge
+        moreTab = InkButton.Create(card, "More", new Vector2(56f, 44f), "more");
+        InkDraw.DotsH(moreTab.AddDrawing(new Vector2(44f, 16f)), InkUI.Ink);
+        moreTab.hoverScale = 1.14f;
+        moreTab.onClick = () => SetDrawer(!drawerOpen);
 
         faderRt = InkUI.Node("Volume", card);
         faderRt.sizeDelta = new Vector2(FaderW + 44f, 40f);
@@ -601,32 +467,6 @@ public class InspectorCard : MonoBehaviour
         InkUI.Centre(knob.rectTransform, new Vector2(x1, 0f), new Vector2(20f, 20f));
     }
 
-    // ------------------------------------------------------------------ tool row
-    void BuildTools()
-    {
-        pencilBtn = InkButton.Create(card, "Pencil", new Vector2(44f, 44f), "redraw");
-        pencilBack = InkShape.Create(pencilBtn.body, "Back", InkShape.Kind.Circle, InkUI.Ink, new Vector2(40f, 40f));
-        pencilBack.raycastTarget = false; pencilBack.HasShadow = false; pencilBack.SetInk(1.5f, 2f);
-        pencilArt = pencilBtn.AddDrawing(new Vector2(38f, 38f));
-        pencilBtn.onClick = () => { if (grid != null) grid.TogglePencil(); lookSig = int.MinValue; };
-        reverseBtn = InkButton.Create(card, "Reverse", new Vector2(44f, 44f), "reverse");
-        reverseArt = reverseBtn.AddDrawing(new Vector2(38f, 38f));
-        InkDraw.Reverse(reverseArt, InkUI.Ink);
-        reverseBtn.onClick = () => { if (grid != null) grid.Reverse(); };
-        string[] words = { "loop", "back and forth", "once" };
-        for (int k = 0; k < 3; k++)
-        {
-            int kk = k;
-            var b = InkButton.Create(card, "Mode" + k, new Vector2(48f, 44f), words[k]);
-            modeArt[k] = b.AddDrawing(new Vector2(44f, 34f));
-            b.onClick = () => { var c = cube; if (c == null || (int)c.mode == kk) return; c.SetMode((PathMode)kk); History.Push(); AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 1.1f + 0.1f * kk); };
-            modeBtns[k] = b;
-        }
-        InkDraw.ModeLoop(modeArt[0], InkUI.Ink); InkDraw.ModePingPong(modeArt[1], InkUI.Ink); InkDraw.ModeOnce(modeArt[2], InkUI.Ink);
-        modeWave = InkWave.Create(card, "ModeWave", InkUI.Ink, new Vector2(36f, 8f));
-        modeWave.Animate = false; modeWave.Thickness = 2.2f;
-    }
-
     // ------------------------------------------------------------------ corners: close sticker, tear-off delete
     void BuildCorners()
     {
@@ -638,156 +478,181 @@ public class InspectorCard : MonoBehaviour
         closeBtn.onClick = CubeInspector.Close;
         closeBtn.hoverScale = 1.12f;
 
-        delBtn = InkButton.Create(card, "Delete", new Vector2(40f, 40f), "delete cube");
-        var perf = InkPath.Create(delBtn.body, "Perforation", new Vector2(40f, 40f));   // the torn corner's perforation
-        perf.UnitPx = 1f; perf.Wobble = 0.3f;
-        for (int i = 0; i < 5; i++) { float t0 = -22f + i * 9f; perf.Line(Palette.A(InkUI.Ink, 0.45f), 1.6f, new Vector2(t0 + 30f, t0 + 1f), new Vector2(t0 + 34f, t0 + 5f)); }
-        var ds = InkShape.Create(delBtn.body, "Sticker", InkShape.Kind.Sticker, InkUI.Red, new Vector2(30f, 30f));
+        // E1: delete = a trash can (cream, on the one red sticker) — never the cross, which only closes
+        delBtn = InkButton.Create(card, "Delete", new Vector2(48f, 48f), "delete cube");
+        var ds = InkShape.Create(delBtn.body, "Sticker", InkShape.Kind.Sticker, InkUI.Red, new Vector2(40f, 40f));
         ds.raycastTarget = false; ds.RotJitter = 5f; ds.SetInk(2f, 3f); ds.ShadowOffset = new Vector2(2f, -3f); ds.Seed = 913;
-        var dx = delBtn.AddDrawing(new Vector2(16f, 16f));
-        InkDraw.Cross(dx, InkUI.Paper, 3.2f);
+        var dx = delBtn.AddDrawing(new Vector2(30f, 30f));
+        InkDraw.Trash(dx, InkUI.Paper, InkUI.Red, 1.15f);
+        delBtn.hoverScale = 1.12f;
         delBtn.onClick = CubeInspector.DeleteCube;
     }
 
-    // ------------------------------------------------------------------ the "more" drawer
+    // ------------------------------------------------------------------ the "more" drawer: a calm grid of icons in three groups
+    static readonly int[] RowGroup = { 0, 1, 1, 2, 2 };   // path · copies (two rows) · devices (two rows): a group gap before each new group
+    static float IconX(int col) => 28f + 22f + IconPitchX * 0.5f + col * IconPitchX;   // the drawer's first 28 px stay under the card
+    static float IconY(int row) => DrawerPadTop + IconPitchY * 0.5f + row * IconPitchY + RowGroup[row] * IconGroupGap;
+    /// <summary>The drawer's height: five rows of icons, a gap between the three groups.</summary>
+    public static float DrawerHeight => 2f * DrawerPadTop + 5f * IconPitchY + 2f * IconGroupGap;
+
+    /// <summary>A drawer icon: an ink drawing (44 px box, pixel units) on the drawer's paper at grid cell (col, row) — no card, no label.</summary>
+    InkButton Icon(string name, int col, int row, string caption, out InkPath art)
+    {
+        var b = InkButton.Create(drawerBody, name, new Vector2(IconHit, IconHit), caption);
+        InkUI.AtTopLeft((RectTransform)b.transform, IconX(col), IconY(row), new Vector2(IconHit, IconHit));
+        art = b.AddDrawing(new Vector2(52f, 52f));
+        art.UnitPx = IconScale; art.Wobble = 0.5f; art.Seed = 7001 + row * 16 + col;   // (the icons are drawn in a 44 px box, shown IconScale larger)
+        b.hoverScale = 1.12f;
+        return b;
+    }
+
+    /// <summary>A drawer icon's "on" state: a short wavy underline (selection is drawn, never a new hue); made on first use.</summary>
+    void Mark(InkButton b, bool on)
+    {
+        if (b == null) return;
+        InkWave w;
+        if (!onMarks.TryGetValue(b, out w))
+        {
+            if (!on) { b.Active = false; return; }
+            w = InkWave.Create(b.body, "On", InkUI.Ink, new Vector2(28f, 8f));
+            w.Animate = false; w.Thickness = 2.2f;
+            InkUI.Centre(w.rectTransform, new Vector2(0f, -IconHit * 0.5f + 2f), new Vector2(28f, 8f));
+            onMarks[b] = w;
+        }
+        if (w.gameObject.activeSelf != on) w.gameObject.SetActive(on);
+        b.Active = on;
+    }
+
     void BuildDrawer()
     {
         drawer = InkUI.Node("Drawer", card);
         drawer.anchorMin = drawer.anchorMax = new Vector2(0f, 1f);
         drawer.pivot = new Vector2(0f, 1f);
-        drawer.sizeDelta = new Vector2(DrawerW, 480f);
-        drawerPaper = InkShape.Create(drawer, "Paper", InkShape.Kind.RoundRect, InkUI.Paper, new Vector2(DrawerW, 480f));
+        drawer.sizeDelta = new Vector2(DrawerW, DrawerHeight);
+        drawerPaper = InkShape.Create(drawer, "Paper", InkShape.Kind.RoundRect, InkUI.Paper, new Vector2(DrawerW, DrawerHeight));
         InkUI.Stretch(drawerPaper.rectTransform);
         drawerPaper.raycastTarget = true; drawerPaper.Radius = 20f; drawerPaper.SetInk(2.2f, 3.8f);
         drawerPaper.ShadowOffset = new Vector2(6f, -8f); drawerPaper.ShadowColor = Comic.PrintShadow; drawerPaper.Seed = 5301; drawerPaper.Wobble = 1.2f;
         drawerBody = InkUI.Node("Body", drawer);
         InkUI.Stretch(drawerBody);
         drawerGroup = drawerBody.gameObject.AddComponent<CanvasGroup>();
+        BuildPathIcons();
+        BuildCopyIcons();
+        BuildDeviceIcons();
+        drawerGroup.alpha = 0f; drawerGroup.blocksRaycasts = false; drawerGroup.interactable = false;
+    }
 
-        // row 1: twin, shadow, echo · row 2: stamp, octave, centred under them (illustrated cards, 100 x 118; v7 §21: the rider is retired)
-        twinCard = DrawerCard("Twin", 0, 0, "twin");
-        CubeAt(twinCard.body, "A", new Vector2(-20f, 2f), 30f); CubeAt(twinCard.body, "B", new Vector2(20f, 2f), 30f);
-        Ground(twinCard.body, -18f);
+    // ---- group 1, PATH: redraw (pencil), reverse (⇄), the three path modes (loop · back and forth · once)
+    void BuildPathIcons()
+    {
+        pencilBtn = InkButton.Create(drawerBody, "Pencil", new Vector2(IconHit, IconHit), "redraw");
+        InkUI.AtTopLeft((RectTransform)pencilBtn.transform, IconX(0), IconY(0), new Vector2(IconHit, IconHit));
+        pencilBack = InkShape.Create(pencilBtn.body, "Back", InkShape.Kind.Circle, InkUI.Ink, new Vector2(50f, 50f));
+        pencilBack.raycastTarget = false; pencilBack.HasShadow = false; pencilBack.SetInk(1.5f, 2f);
+        pencilArt = pencilBtn.AddDrawing(new Vector2(46f, 46f));
+        pencilBtn.hoverScale = 1.12f;
+        pencilBtn.onClick = () => { if (grid != null) grid.TogglePencil(); lookSig = int.MinValue; };
+        reverseBtn = Icon("Reverse", 1, 0, "reverse", out reverseArt);
+        InkDraw.Reverse(reverseArt, InkUI.Ink);
+        reverseBtn.onClick = () => { if (grid != null) grid.Reverse(); };
+        string[] words = { "loop", "back and forth", "once" };
+        for (int k = 0; k < 3; k++)
+        {
+            int kk = k;
+            var b = Icon("Mode" + k, 2 + k, 0, words[k], out modeArt[k]);
+            b.onClick = () => { var c = cube; if (c == null || (int)c.mode == kk) return; c.SetMode((PathMode)kk); History.Push(); AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 1.1f + 0.1f * kk); };
+            modeBtns[k] = b;
+        }
+        InkDraw.ModeLoop(modeArt[0], InkUI.Ink); InkDraw.ModePingPong(modeArt[1], InkUI.Ink); InkDraw.ModeOnce(modeArt[2], InkUI.Ink);
+    }
+
+    // ---- group 2, COPIES: copy (two sheets), paste → next grid (a clipboard with an arrow), flip (a mirror), climb (chevrons);
+    //      octave copy ↑ / ↓ (the cube with a glass copy above / below), harmony ↑ / ↓ (a second note on the note's stem)
+    void BuildCopyIcons()
+    {
+        copyBtn = Icon("Copy", 0, 1, "copy", out copyArt);
+        copyBtn.onClick = CopyClick;
+        pasteBtn = Icon("PasteNext", 1, 1, "paste on the next grid", out pasteArt);
+        pasteBtn.onClick = PasteNextClick;
+        // v7: hovering it (or a right-click) fans the paste modes
+        pasteBtn.onHover = on => { pasteHoverT = on ? Time.unscaledTime : -1f; };
+        pasteBtn.onRightClick = () => OpenPasteFan(false);
+        flipBtn = Icon("Flip", 2, 1, "flip upside down", out flipArt);
+        flipBtn.onClick = FlipClick;
+        // climb (DeaCube/Climb.cs): the path's high note reaches higher — off → ×1 → ×2 → ×3 → off (one chevron per level)
+        climbBtn = Icon("Climb", 3, 1, Climb.Caption(0), out climbArt);
+        climbBtn.onClick = ClimbClick;
+
+        octCopyUp = Icon("OctaveCopyUp", 0, 2, "octave copy up", out octMarkUp);
+        octCubeUp = IdeaCube(octCopyUp.body, "Cube", new Vector2(-4f, -11f), 26f);
+        octGhostUp = IdeaCube(octCopyUp.body, "Ghost", new Vector2(-4f, 13f), 22f);
+        octCopyUp.onClick = () => OctaveCopyClick(1);
+        octCopyUp.onHover = on => IdeaHover(octGhostUp, on);
+        octCopyDown = Icon("OctaveCopyDown", 1, 2, "octave copy down", out octMarkDown);
+        octGhostDown = IdeaCube(octCopyDown.body, "Ghost", new Vector2(-4f, -13f), 22f);
+        octCubeDown = IdeaCube(octCopyDown.body, "Cube", new Vector2(-4f, 11f), 26f);
+        octCopyDown.onClick = () => OctaveCopyClick(-1);
+        octCopyDown.onHover = on => IdeaHover(octGhostDown, on);
+        InkDraw.Chevron(octMarkUp, InkUI.Ink, new Vector2(15f, 11f), true);
+        InkDraw.Chevron(octMarkDown, InkUI.Ink, new Vector2(15f, -11f), false);   // (the harmony icons wear the same ∧ / ∨: this row reads up, down, up, down)
+
+        harmUp = Icon("HarmonyAbove", 2, 2, "harmony above", out harmArtUp);
+        harmUp.onClick = () => HarmonyClick(true);
+        harmUp.onHover = on => HarmonyHover(true, on);
+        harmDown = Icon("HarmonyBelow", 3, 2, "harmony below", out harmArtDown);
+        harmDown.onClick = () => HarmonyClick(false);
+        harmDown.onHover = on => HarmonyHover(false, on);
+    }
+
+    // ---- group 3, DEVICES: twin (×2), shadow (the cube and its dark followers), echo (ripples), stamp (a rubber stamp);
+    //      octave ↑ / ↓ (8 with an arrow), gate (short · normal · long bars)
+    void BuildDeviceIcons()
+    {
+        twinCard = Icon("Twin", 0, 3, "twin", out twinArt);
+        InkDraw.Times2(twinArt, InkUI.Ink);
         twinCard.onClick = () => MakeTwin(0);
         twinCard.holdSeconds = 0.5f; twinCard.onHold = OpenTwinPopover;
 
-        shadowCard = DrawerCard("Shadow", 1, 0, "shadow");
-        for (int i = 2; i >= 0; i--) { shadowCopies[i] = CubeAt(shadowCard.body, "Copy" + i, new Vector2(-24f + 15f * (i + 1), -4f - 4f * (i + 1)), 26f); }
-        CubeAt(shadowCard.body, "Lead", new Vector2(-24f, 0f), 30f);
+        InkPath none;
+        shadowCard = Icon("Shadow", 1, 3, "shadow", out none);
+        for (int i = 2; i >= 0; i--) shadowCopies[i] = CubeAt(shadowCard.body, "Copy" + i, new Vector2(-10f + 9f * (i + 1), 8f - 7f * (i + 1)), 19f);
+        CubeAt(shadowCard.body, "Lead", new Vector2(-11f, 9f), 25f);
         shadowCard.onClick = () => { var c = cube; if (c == null) return; c.SetFollow((c.follow + 1) % 4); History.Push(); Pop(shadowCard); };
 
-        echoCard = DrawerCard("Echo", 2, 0, "echo");
-        for (int i = 1; i >= 0; i--) echoCopies[i] = CubeAt(echoCard.body, "Echo" + i, new Vector2(-2f + 20f * (i + 1), 0f), 28f - 4f * (i + 1));
-        CubeAt(echoCard.body, "Lead", new Vector2(-24f, 0f), 30f);
-        shimmerArt = InkPath.Create(echoCard.body, "Shimmer", new Vector2(90f, 90f));
+        echoCard = Icon("Echo", 2, 3, "echo", out echoArt);
+        shimmerArt = InkPath.Create(echoCard.body, "Shimmer", new Vector2(52f, 52f));
         shimmerArt.raycastTarget = false; InkDraw.Sparkles(shimmerArt, Comic.Pop);
         echoCard.onClick = () => { var c = cube; if (c == null) return; c.SetEcho((c.echo + 1) % 3); History.Push(); Pop(echoCard); };
         echoCard.holdSeconds = 0.5f;
         echoCard.onHold = () => { var c = cube; if (c == null) return; c.SetShimmer(!c.shimmer); History.Push(); AudioPool.UI(ProceduralAudio.Sparkle(), 0.25f, 1.2f); };
 
-        stampCard = DrawerCard("Stamp", 0, 1, "stamp (hold: every island)", HalfPitch);
-        var tile = InkPath.Create(stampCard.body, "Tile", new Vector2(80f, 80f));
-        tile.raycastTarget = false; InkDraw.StampTile(tile, InkUI.Ink, InkUI.PaperDeep);
-        CubeAt(stampCard.body, "Cube", new Vector2(0f, 12f), 30f);
+        stampCard = Icon("Stamp", 3, 3, "stamp (hold: every island)", out stampArt);
         stampCard.onClick = StampClick;
         stampCard.holdSeconds = 0.6f; stampCard.onHold = StampAll;
 
-        // the octave ladder card: ▲ upper half, ▼ lower half, the ladder between (the filled rung is the octave)
-        var octRt = InkUI.Node("Octave", drawerBody);
-        InkUI.AtTopLeft(octRt, CardX(1) + HalfPitch, CardY(1), new Vector2(100f, 118f));
-        var octPaper = InkShape.Create(octRt, "Paper", InkShape.Kind.RoundRect, InkUI.Paper, new Vector2(100f, 118f));
-        InkUI.Stretch(octPaper.rectTransform); octPaper.raycastTarget = false; octPaper.Radius = 12f; octPaper.SetInk(1.6f, 2.6f);
-        octPaper.ShadowColor = InkUI.PaperDeep; octPaper.ShadowOffset = new Vector2(0f, -5f); octPaper.Seed = 7702;
-        ladder = InkPath.Create(octRt, "Ladder", new Vector2(56f, 60f));
-        ladder.raycastTarget = false;
-        octUp = InkButton.Create(octRt, "Up", new Vector2(100f, 36f), "higher");
-        InkUI.AtTopLeft((RectTransform)octUp.transform, 50f, 18f, new Vector2(100f, 36f));
-        InkDraw.Triangle(octUp.AddDrawing(new Vector2(22f, 18f)), InkUI.Ink, true);
+        octUp = Icon("OctaveUp", 0, 4, "higher", out octUpArt);
+        InkDraw.Octave(octUpArt, InkUI.Ink, true);
         octUp.onClick = () => { var c = cube; if (c == null || c.IsDrums || c.octave >= 1) return; c.SetOctave(c.octave + 1); History.Push(); };
-        octDown = InkButton.Create(octRt, "Down", new Vector2(100f, 36f), "lower");
-        InkUI.AtTopLeft((RectTransform)octDown.transform, 50f, 100f, new Vector2(100f, 36f));
-        InkDraw.Triangle(octDown.AddDrawing(new Vector2(22f, 18f)), InkUI.Ink, false);
+        octDown = Icon("OctaveDown", 1, 4, "lower", out octDownArt);
+        InkDraw.Octave(octDownArt, InkUI.Ink, false);
         octDown.onClick = () => { var c = cube; if (c == null || c.IsDrums || c.octave <= -1) return; c.SetOctave(c.octave - 1); History.Push(); };
 
-        // gate: three cube drawings (a gap = short, touching = normal, an ink bridge = long)
         string[] gw = { "short notes", "normal notes", "long notes" };
         for (int k = 0; k < 3; k++)
         {
             int kk = k;
-            var b = InkButton.Create(drawerBody, "Gate" + k, new Vector2(100f, 60f), gw[k]);
-            InkUI.AtTopLeft((RectTransform)b.transform, CardX(k), 2f * 118f + 3f * 14f + 30f, new Vector2(100f, 60f));
-            float half = k == 0 ? 19f : (k == 1 ? 12f : 21f);   // short: a gap · normal: touching · long: held across by an ink bridge
-            if (k == 2)
-            {
-                var bridge = InkPath.Create(b.body, "Bridge", new Vector2(60f, 30f));
-                bridge.raycastTarget = false; bridge.UnitPx = 1f;
-                bridge.Line(InkUI.Ink, 8f, new Vector2(-half, 0f), new Vector2(half, 0f)).Line(Palette.A(InkUI.Paper, 0.9f), 3f, new Vector2(-half + 10f, 0f), new Vector2(half - 10f, 0f));
-            }
-            CubeAt(b.body, "A", new Vector2(-half, 0f), 24f); CubeAt(b.body, "B", new Vector2(half, 0f), 24f);
+            var b = Icon("Gate" + k, 2 + k, 4, gw[k], out gateArt[k]);
             b.onClick = () => { var c = cube; if (c == null || c.IsDrums || (int)c.gate == kk) return; c.SetGate((Gate)kk); History.Push(); AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 0.9f + 0.15f * kk); };
             gateBtns[k] = b;
         }
-        gateWave = InkWave.Create(drawerBody, "GateWave", InkUI.Ink, new Vector2(60f, 8f));
-        gateWave.Animate = false;
-
-        // legacy cubes only: the necklace and the pace row (the uniform step)
-        legacyRt = InkUI.Node("Legacy", drawerBody);
-        InkUI.AtTopLeft(legacyRt, 28f + (DrawerW - 28f) * 0.5f, 2f * 118f + 3f * 14f + 60f + 14f + 55f, new Vector2(DrawerW - 40f, 110f));
-        dial = NecklaceDial.Create(legacyRt, "Necklace", 34f);
-        var dialRt = (RectTransform)dial.transform;
-        dialRt.anchorMin = dialRt.anchorMax = new Vector2(0f, 0.5f); dialRt.anchoredPosition = new Vector2(52f, 0f);
-        dial.onHits = k => { var c = cube; if (c != null) c.SetHits(k); };
-        dial.onRot = r => { var c = cube; if (c != null) c.SetRot(r); };
-        dial.onMask = m => { var c = cube; if (c != null) c.SetMask(m); };
-        dial.onBeadToggle = ToggleBead;
-        dial.onRelease = () => { if (cube == null) return; History.Push(); CubeInspector.NoteRhythmEdited(); };
-        InkCaption.Attach(dial.gameObject, "rhythm");
-        float[] paceBeats = { 2f, 1f, 0.5f, 1f / 3f, 0.25f };
-        string[] pw = { "slow", "steady", "quick", "lilting", "fast" };
-        for (int k = 0; k < 5; k++)
-        {
-            int kk = k;
-            float px = 26f * Mathf.Pow(AudioCube.SizeOf(paceBeats[k]), 1.5f);
-            var b = InkButton.Create(legacyRt, "Pace" + k, new Vector2(34f, 56f), pw[k]);
-            var br = (RectTransform)b.transform;
-            br.anchorMin = br.anchorMax = new Vector2(0f, 0.5f); br.anchoredPosition = new Vector2(122f + k * 38f, 0f);
-            var cg = CubeGlyph.Create(b.body, "Cube", Color.white, px);
-            cg.raycastTarget = false; cg.GroundShadow = true;
-            ((RectTransform)cg.transform).anchoredPosition = new Vector2(0f, px * 0.5f - 12f);
-            paceCubes[k] = cg; tinted.Add(cg);
-            b.onClick = () => { var c = cube; if (c == null || c.step == PaceOrder[kk]) return; c.SetStep(PaceOrder[kk]); History.Push(); CubeInspector.NoteRhythmEdited(); };
-            paceBtns[k] = b;
-        }
-
-        // the tab (always visible): three dots on a paper tongue sticking out of the card's right edge
-        moreTab = InkButton.Create(drawer, "MoreTab", new Vector2(34f, 72f), "more");
-        var tr = (RectTransform)moreTab.transform;
-        tr.anchorMin = tr.anchorMax = new Vector2(1f, 1f); tr.pivot = new Vector2(0f, 0.5f);
-        var tongue = InkShape.Create(moreTab.body, "Tongue", InkShape.Kind.RoundRect, InkUI.Paper, new Vector2(30f, 68f));
-        tongue.raycastTarget = false; tongue.Radius = 10f; tongue.SetInk(2f, 3.2f); tongue.ShadowOffset = new Vector2(4f, -5f); tongue.ShadowColor = Comic.PrintShadow; tongue.Seed = 6107;
-        ((RectTransform)tongue.transform).anchoredPosition = new Vector2(2f, 0f);
-        InkDraw.Dots3(moreTab.AddDrawing(new Vector2(12f, 44f)), InkUI.Ink);
-        moreTab.onClick = () => SetDrawer(!drawerOpen);
-        drawerGroup.alpha = 0f; drawerGroup.blocksRaycasts = false; drawerGroup.interactable = false;
     }
 
-    static float CardX(int col) => 42f + 50f + col * (100f + 14f);   // the drawer's first 28 px stay under the card
-    static float CardY(int row) => 14f + 59f + row * (118f + 14f);
-
-    /// <summary>Half a drawer card's pitch: a row of two cards sits centred under a row of three.</summary>
-    const float HalfPitch = (100f + 14f) * 0.5f;
-
-    InkButton DrawerCard(string name, int col, int row, string caption, float xShift = 0f)
+    CubeGlyph IdeaCube(Transform parent, string name, Vector2 pos, float px)
     {
-        var b = InkButton.Create(drawerBody, name, new Vector2(100f, 118f), caption);
-        InkUI.AtTopLeft((RectTransform)b.transform, CardX(col) + xShift, CardY(row), new Vector2(100f, 118f));
-        var bg = InkShape.Create(b.body, "Paper", InkShape.Kind.RoundRect, InkUI.Paper, new Vector2(100f, 118f));
-        InkUI.Stretch(bg.rectTransform);
-        bg.raycastTarget = false; bg.Radius = 12f; bg.SetInk(1.6f, 2.6f);
-        bg.ShadowColor = InkUI.PaperDeep; bg.ShadowOffset = new Vector2(0f, -5f);   // Melatonin's pale bottom lip (the card's thickness)
-        bg.Seed = name.GetHashCode();
-        b.hoverScale = 1.05f;
-        return b;
+        var g = CubeGlyph.Create(parent, name, Color.white, px);
+        g.raycastTarget = false;
+        ((RectTransform)g.transform).anchoredPosition = pos;
+        return g;
     }
 
     CubeGlyph CubeAt(Transform parent, string name, Vector2 pos, float px)
@@ -797,14 +662,6 @@ public class InspectorCard : MonoBehaviour
         ((RectTransform)g.transform).anchoredPosition = pos;
         tinted.Add(g);
         return g;
-    }
-
-    static void Ground(Transform parent, float y)
-    {
-        var p = InkPath.Create(parent, "Ground", new Vector2(80f, 10f));
-        p.raycastTarget = false; p.UnitPx = 1f; p.Wobble = 0.5f;
-        ((RectTransform)p.transform).anchoredPosition = new Vector2(0f, y);
-        p.Line(Palette.A(InkUI.Ink, 0.6f), 2f, new Vector2(-36f, 0f), new Vector2(36f, 0f));
     }
 
     static void Pop(InkButton b) { if (b != null && b.body != null) b.body.localScale = new Vector3(1.12f, 1.12f, 1f); AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 1.2f); }
@@ -1176,7 +1033,7 @@ public class InspectorCard : MonoBehaviour
 
     static Vector2 ScreenOf(Transform t) => RectTransformUtility.WorldToScreenPoint(null, t.position);
 
-    // ------------------------------------------------------------------ drawer actions (twin, stamp, necklace beads)
+    // ------------------------------------------------------------------ drawer actions (twin, stamp)
     void MakeTwin(int variant)
     {
         var c = cube; var pm = PathManager.I;
@@ -1224,20 +1081,6 @@ public class InspectorCard : MonoBehaviour
         Pop(stampCard);
     }
 
-    /// <summary>Necklace bead click: the visible pattern with step j flipped becomes an explicit mask (hits = -2).</summary>
-    void ToggleBead(int j)
-    {
-        var c = cube; if (c == null || dial == null) return;
-        var p = dial.Pattern();
-        int m = 0;
-        for (int i = 0; i < p.Length && i < 31; i++) if (p[i]) m |= 1 << i;
-        if (j >= 0 && j < 31) m ^= 1 << j;
-        c.SetMask(m);
-        if (c.hits != -2) c.SetHits(-2);
-        History.Push();
-        CubeInspector.NoteRhythmEdited();
-    }
-
     // ================================================================== binding + layout
     void Bind(AudioCube c)
     {
@@ -1249,7 +1092,7 @@ public class InspectorCard : MonoBehaviour
         grid.ResetTools();
         grid.Bind(c);
         strip.Bind(c);
-        if (DurationPicker.Mode == DurationPicker.Where.Inspector) DurationPicker.Hide();
+        DurationPicker.Show(c, -1);   // E1: the size row is on the card at rest — the size of the NEXT note (a selected note takes it over)
         fader.Set(c.volume, false);
         RegisterHints();
     }
@@ -1263,18 +1106,11 @@ public class InspectorCard : MonoBehaviour
         float y = HeaderTop;
         InkUI.AtTopLeft((RectTransform)chip.transform, Pad + 26f, y + HeaderH * 0.5f, new Vector2(58f, 58f));
         InkUI.AtTopLeft(faderRt, Pad + 58f + 16f + (FaderW + 44f) * 0.5f, y + HeaderH * 0.5f, new Vector2(FaderW + 44f, 40f));
-        InkUI.AtTopLeft((RectTransform)copyBtn.transform, W - 156f, y + HeaderH * 0.5f + 2f, new Vector2(48f, 46f));
-        InkUI.AtTopLeft((RectTransform)pasteBtn.transform, W - 96f, y + HeaderH * 0.5f + 2f, new Vector2(60f, 48f));
+        InkUI.AtTopLeft((RectTransform)moreTab.transform, W - 74f, y + HeaderH * 0.5f, new Vector2(56f, 44f));
         y += HeaderH + GridGap;
         InkUI.AtTopLeft(grt, W * 0.5f, y + gh * 0.5f, new Vector2(gw, gh));
         InkUI.AtTopLeft(harmGhost.rectTransform, W * 0.5f, y + gh * 0.5f, new Vector2(gw, gh));   // v7: over the grid, in its local space
-        y += gh + 6f;
-        float cy = y + ToolsH * 0.5f;
-        float x0 = W * 0.5f - 138f;
-        InkUI.AtTopLeft((RectTransform)pencilBtn.transform, x0 + 22f, cy, new Vector2(44f, 44f));
-        InkUI.AtTopLeft((RectTransform)reverseBtn.transform, x0 + 72f, cy, new Vector2(44f, 44f));
-        for (int k = 0; k < 3; k++) InkUI.AtTopLeft((RectTransform)modeBtns[k].transform, x0 + 136f + k * 52f, cy, new Vector2(48f, 44f));
-        y += ToolsH + 6f;
+        y += gh + 14f;
         InkUI.AtTopLeft((RectTransform)strip.transform, W * 0.5f, y + RhythmStrip.Height * 0.5f, new Vector2(RhythmStrip.Width, RhythmStrip.Height));
         y += RhythmStrip.Height + 4f;
         InkUI.AtTopLeft(lengthSlot, W * 0.5f, y + RowH * 0.5f, new Vector2(W - 2f * Pad, RowH));
@@ -1282,22 +1118,16 @@ public class InspectorCard : MonoBehaviour
         H = y;
         card.sizeDelta = new Vector2(W, H);
         InkUI.AtTopLeft((RectTransform)closeBtn.transform, W - 10f, 8f, new Vector2(46f, 46f));
-        InkUI.AtTopLeft((RectTransform)delBtn.transform, 12f, H - 12f, new Vector2(40f, 40f));
-        // the drawer: under the card's right part, its tab on the card's right edge near the bottom
-        float dh = DrawerHeight();
-        drawer.sizeDelta = new Vector2(DrawerW, dh);
-        ((RectTransform)moreTab.transform).anchoredPosition = new Vector2(-4f, -Mathf.Min(dh - 44f, H - 150f));
+        InkUI.AtTopLeft((RectTransform)delBtn.transform, 16f, H - 16f, new Vector2(48f, 48f));
         PlaceDrawer();
     }
-
-    float DrawerHeight() => IsDurations || cube == null ? 2f * 118f + 3f * 14f + 60f + 26f + 12f : 2f * 118f + 3f * 14f + 60f + 26f + 110f + 20f;
 
     void PlaceDrawer()
     {
         float e = Look.Stepped(drawerT);
         e = e * e * (3f - 2f * e);
         float closedX = W - DrawerW - 6f, openX = W - 28f;
-        drawer.anchoredPosition = new Vector2(Mathf.Lerp(closedX, openX, e), -34f);
+        drawer.anchoredPosition = new Vector2(Mathf.Lerp(closedX, openX, e), -Mathf.Max(34f, Mathf.Min(64f, H - DrawerHeight - 20f)));   // under the card's right part (a short card: nearer its top)
         drawerGroup.alpha = e > 0.02f ? 1f : 0f;
         bool on = drawerOpen && e > 0.98f;
         drawerGroup.blocksRaycasts = on; drawerGroup.interactable = on;
@@ -1332,9 +1162,10 @@ public class InspectorCard : MonoBehaviour
         if (cube == null) return;
         HideOldPanel();
 
-        var isl = cube.Island;
+        var isl = grid.Island != null && grid.Cube == cube ? grid.Island : cube.Island;   // (E1: a span cube's flat grid may show a later grid of its chain)
         int cols = isl != null ? Mathf.Max(1, isl.cols) : 1, rows = isl != null ? Mathf.Max(1, isl.rows) : 1;
         if (cols != gridCols || rows != gridRows) Layout(cols, rows);
+        if (want && DurationPicker.Mode == DurationPicker.Where.Hidden) DurationPicker.Show(cube, strip.SelectedNote);   // E1: the size row is always on the card
 
         // look + state (only when something changed)
         int sig = LookSig(cube);
@@ -1354,6 +1185,7 @@ public class InspectorCard : MonoBehaviour
 
         // the selected note shows in the grid and in the world
         grid.HighlightNode = strip.SelectedNote;
+        grid.SetView(strip.ViewGrid);   // E1: a span cube — the grid of its chain that holds the selected note (else the strip part picked, the playhead's, the first)
         UpdateWorldMark(dt);
         ClosePopoversOnOutsideClick();
         // v7: the paste fan opens after a short rest on paste → next grid; the harmony preview after a short rest on a harmony half
@@ -1378,6 +1210,7 @@ public class InspectorCard : MonoBehaviour
         if (DurationPicker.Mode == DurationPicker.Where.Inspector) DurationPicker.Hide();
         if (strip != null) strip.Deselect();
         if (delBtn != null && !delBtn.gameObject.activeSelf) delBtn.gameObject.SetActive(true);
+        if (splitBtn != null && splitBtn.gameObject.activeSelf) splitBtn.gameObject.SetActive(false);
         if (spotCube != null) { Performance.HoldSpotlight(spotCube, false); spotCube = null; }
         if (worldMark != null) worldMark.gameObject.SetActive(false);
         card.gameObject.SetActive(false);
@@ -1410,7 +1243,7 @@ public class InspectorCard : MonoBehaviour
         }
         float rLocal = rPx * upp;
         float s = Mathf.Clamp((rr.height - TopMargin - BottomMargin) / Mathf.Max(1f, H), 0.5f, 1f);
-        float wTotal = (W + (drawerOpen ? DrawerW - 28f : 20f)) * s;
+        float wTotal = (W + (drawerOpen ? DrawerW - 28f : 14f)) * s;
         float left = proxy.x + rLocal + TailGap * s;
         left = Mathf.Min(left, rr.xMax - 18f - wTotal);
         left = Mathf.Max(left, rr.xMin + 18f);
@@ -1456,89 +1289,59 @@ public class InspectorCard : MonoBehaviour
         bool drums = c.IsDrums;
         chipCube.color = col; chipCube.Hollow = muted;
         DrawFader();
-        // v6: the voice pips on the chip and its name as the caption; copy / paste → next in the cube's colour
+        // v6: the voice pips on the chip and its name as the caption
         chipMark.Repaint();
         int grp = Mathf.Clamp(c.instrument, 0, Instruments.Count - 1);
         InkCaption.Attach(chip.gameObject, HudInstruments.VoicesOf(grp) >= 2 ? Instruments.VoiceName(grp, ShownVoice(c)) : "sound");
-        InkDraw.Copy(copyArt, InkUI.Ink, InkUI.Paper, InkUI.PaperDeep, col);
-        InkDraw.PasteNext(pasteArt, InkUI.Ink, InkUI.Paper, InkUI.PaperDeep, col, Comic.Pop);
-        copyBtn.Interactable = c.nodes.Count > 0;
-        pasteBtn.Interactable = c.nodes.Count > 0 && CanPasteNext(c);
-        // v7: the ideas row in the cube's colour; an octave copy stops at the outer layers; drums have no octaves, harmonies or flips
-        octCube.color = col; harmCube.color = col;
-        Color partner = Color.Lerp(col, InkUI.Paper, 0.3f);
-        harmUpCube.color = partner; harmDownCube.color = partner;
-        octCopyUp.Interactable = CubeOps.CanOctaveCopy(c, 1);
-        octCopyDown.Interactable = CubeOps.CanOctaveCopy(c, -1);
-        bool harm = CubeOps.HarmonyRefusal(c) == null;
-        harmUp.Interactable = harm; harmDown.Interactable = harm;
-        flipBtn.Interactable = !drums && c.nodes.Count >= 2 && CubeOps.FlipRefusal(c) == null;
-        climbBtn.Interactable = Climb.CanClimb(c);
-        InkCaption.Attach(climbBtn.gameObject, Climb.Caption(c.climb));
-        upExists = HasLayerCopy(c, c.layer + 1); downExists = HasLayerCopy(c, c.layer - 1);
-        PaintGhost(octGhostUp, octCopyUp.Hovered || upExists); PaintGhost(octGhostDown, octCopyDown.Hovered || downExists);
-        DrawIdeaMarks();
-        DrawFlip(col);
-        DrawClimb(col, c.climb);
-        // tools
+        // ---- the drawer, group PATH
         bool armed = grid.PencilArmed;
         pencilBack.gameObject.SetActive(armed);
         InkDraw.Pencil(pencilArt, armed ? InkUI.Paper : InkUI.Ink, Comic.Pop);
         pencilBtn.Active = armed;
         reverseBtn.Interactable = c.nodes.Count >= 2;
         int mode = (int)c.mode;
-        for (int k = 0; k < 3; k++) { modeArt[k].color = k == mode ? Color.white : new Color(1f, 1f, 1f, 0.55f); }
-        var mrt = (RectTransform)modeBtns[mode].transform;
-        modeWave.rectTransform.anchorMin = modeWave.rectTransform.anchorMax = mrt.anchorMin;
-        modeWave.rectTransform.anchoredPosition = mrt.anchoredPosition + new Vector2(0f, -21f);
-        // drawer
+        for (int k = 0; k < 3; k++) Mark(modeBtns[k], k == mode);
+        // ---- group COPIES (an octave copy stops at the outer layers; drums have no octaves, harmonies or flips)
+        InkDraw.Copy(copyArt, InkUI.Ink, InkUI.Paper, InkUI.PaperDeep);
+        InkDraw.PasteNext(pasteArt, InkUI.Ink, InkUI.Paper, col);
+        copyBtn.Interactable = c.nodes.Count > 0;
+        pasteBtn.Interactable = c.nodes.Count > 0 && CanPasteNext(c);
+        InkDraw.Flip(flipArt, InkUI.Ink, col);
+        flipBtn.Interactable = !drums && c.nodes.Count >= 2 && CubeOps.FlipRefusal(c) == null;
+        InkDraw.Climb(climbArt, InkUI.Ink, col, c.climb);
+        climbBtn.Interactable = Climb.CanClimb(c);
+        Mark(climbBtn, c.climb > 0);
+        InkCaption.Attach(climbBtn.gameObject, Climb.Caption(c.climb));
+        octCubeUp.color = col; octCubeDown.color = col;
+        octCopyUp.Interactable = CubeOps.CanOctaveCopy(c, 1);
+        octCopyDown.Interactable = CubeOps.CanOctaveCopy(c, -1);
+        upExists = HasLayerCopy(c, c.layer + 1); downExists = HasLayerCopy(c, c.layer - 1);
+        PaintGhost(octGhostUp, octCopyUp.Hovered || upExists); PaintGhost(octGhostDown, octCopyDown.Hovered || downExists);
+        bool harm = CubeOps.HarmonyRefusal(c) == null;
+        harmUp.Interactable = harm; harmDown.Interactable = harm;
+        InkDraw.Harmony(harmArtUp, InkUI.Ink, col, true); InkDraw.Harmony(harmArtDown, InkUI.Ink, col, false);
+        // ---- group DEVICES
         foreach (var g in tinted) if (g != null && g.transform.IsChildOf(drawerBody)) g.color = col;
         for (int i = 0; i < shadowCopies.Length; i++)
         {
             bool on = i < c.follow;
             shadowCopies[i].color = on ? Color.Lerp(col, InkUI.Ink, 0.55f + 0.12f * i) : Palette.A(col, 0.18f);
             shadowCopies[i].Hollow = !on;
+            bool show = on || (i == 0 && c.follow == 0);   // off: one faint follower hints at what a click adds
+            if (shadowCopies[i].gameObject.activeSelf != show) shadowCopies[i].gameObject.SetActive(show);
         }
-        for (int i = 0; i < echoCopies.Length; i++)
-        {
-            bool on = i < c.echo;
-            echoCopies[i].color = on ? Palette.A(col, 0.62f - 0.22f * i) : Palette.A(col, 0.16f);
-            echoCopies[i].Hollow = !on;
-        }
+        InkDraw.Echo(echoArt, InkUI.Ink, col, c.echo);
         shimmerArt.gameObject.SetActive(c.shimmer);
-        SetOn(shadowCard, c.follow > 0); SetOn(echoCard, c.echo > 0);
+        Mark(shadowCard, c.follow > 0); Mark(echoCard, c.echo > 0);
         shadowCard.Interactable = !drums; echoCard.Interactable = !drums;
+        InkDraw.Stamp(stampArt, InkUI.Ink, InkUI.Paper, col);
         stampCard.Interactable = SongManager.I != null && SongManager.I.HasSong && SongManager.I.Islands.Count > 1 && !c.IsOnMoon;
         octUp.Interactable = !drums && c.octave < 1; octDown.Interactable = !drums && c.octave > -1;
-        InkDraw.Ladder(ladder, InkUI.Ink, col, drums ? -9 : c.octave);
-        ((RectTransform)ladder.transform).anchoredPosition = Vector2.zero;
+        Mark(octUp, !drums && c.octave > 0); Mark(octDown, !drums && c.octave < 0);   // the cube plays an octave higher / lower now
         int gate = (int)c.gate;
-        for (int k = 0; k < 3; k++) { gateBtns[k].Interactable = !drums; SetOn(gateBtns[k], k == gate && !drums); }
-        var grt = (RectTransform)gateBtns[gate].transform;
-        gateWave.rectTransform.anchorMin = gateWave.rectTransform.anchorMax = grt.anchorMin;
-        gateWave.rectTransform.anchoredPosition = grt.anchoredPosition + new Vector2(0f, -26f);
-        gateWave.gameObject.SetActive(!drums);
-        bool legacy = !c.HasDurations;
-        legacyRt.gameObject.SetActive(legacy);
-        if (legacy)
-        {
-            dial.color = col;
-            dial.Set(c.StepsPerBar, c.hits, c.rot, c.mask, false);
-            for (int k = 0; k < 5; k++) { paceCubes[k].color = col; paceCubes[k].Ring = c.step == PaceOrder[k]; }
-        }
-        float dh = DrawerHeight();
-        if (Mathf.Abs(drawer.sizeDelta.y - dh) > 0.5f) { drawer.sizeDelta = new Vector2(DrawerW, dh); ((RectTransform)moreTab.transform).anchoredPosition = new Vector2(-4f, -Mathf.Min(dh - 44f, H - 150f)); }
+        for (int k = 0; k < 3; k++) { InkDraw.Gate(gateArt[k], InkUI.Ink, col, k); gateBtns[k].Interactable = !drums; Mark(gateBtns[k], k == gate && !drums); }
         if (instPop.gameObject.activeSelf) RefreshInstrumentPopover();
         RegisterHints();
-    }
-
-    /// <summary>A drawer card's "on" state: popped out with a 3° tilt and a heavier ink (selection is drawn, never a new hue).</summary>
-    static void SetOn(InkButton b, bool on)
-    {
-        var bg = b.body.Find("Paper") != null ? b.body.Find("Paper").GetComponent<InkShape>() : null;
-        b.transform.localRotation = Quaternion.Euler(0f, 0f, on ? 3f : 0f);
-        if (bg != null) { if (on) bg.SetInk(2.6f, 3.8f); else bg.SetInk(1.6f, 2.6f); }
-        b.Active = on;
     }
 
     // ------------------------------------------------------------------ spotlight (hold the chip)
@@ -1552,23 +1355,21 @@ public class InspectorCard : MonoBehaviour
         chipCube.Ring = spotCube != null;
     }
 
-    // ------------------------------------------------------------------ the selected note: length row, world mark
+    // ------------------------------------------------------------------ the selected note: the size row, its tools, the world mark
     void HandleNoteSelected(int node)
     {
-        // v6: one tear-off at a time — with a note selected the strip's tear-off deletes the note and the cube's steps aside
+        // v6: one trash can at a time — with a note selected the strip's tear-off deletes the note and the cube's steps aside
         if (delBtn != null && delBtn.gameObject.activeSelf != (node < 0)) delBtn.gameObject.SetActive(node < 0);
         if (cube == null) return;
-        if (node >= 0) DurationPicker.Show(cube, node);
-        else if (DurationPicker.Mode == DurationPicker.Where.Inspector) DurationPicker.Hide();
-        // v7: the ideas row rests in the slot; a selected note's length row takes it (the face stays ≤ 20 targets)
-        if (ideasRt != null && ideasRt.gameObject.activeSelf != (node < 0)) { ideasRt.gameObject.SetActive(node < 0); if (node >= 0) { harmHover = 0; EndHarmonyPreview(); } }
+        DurationPicker.Show(cube, node);   // E1: the size row stays — the selected note's size, or (none: -1) the size of the next note
     }
 
     Transform worldMark; Material markInk, markCream; float markT;
 
-    // ------------------------------------------------------------------ v9 (N): the selected note's nudge
-    /// <summary>Two stacked buttons left of the length row: ▲ "higher" / ▼ "lower" — the selected step plays the next scale note of the song key
-    /// above / below its tile (±1 a click, up to ±2; the arrow doubles at 2). One History entry per effective click; the step auditions.</summary>
+    // ------------------------------------------------------------------ v9 (N): the selected note's nudge; E1: its scissors
+    /// <summary>Left of the size row, only while a note is selected: ▲ "higher" / ▼ "lower" stacked — the selected step plays the next scale note
+    /// of the song key above / below its tile (±1 a click, up to ±2; the arrow doubles at 2; one History entry per effective click; the step
+    /// auditions) — and ONE scissors beside them: the note becomes two halves on its tile (RhythmStrip.SplitSelected; key S).</summary>
     void BuildNudge()
     {
         nudgeRt = InkUI.Node("Nudge", lengthSlot);
@@ -1583,6 +1384,13 @@ public class InspectorCard : MonoBehaviour
         nudgeDown.onClick = () => NudgeClick(-1);
         DrawNudge(0);
         nudgeRt.gameObject.SetActive(false);
+        splitBtn = InkButton.Create(lengthSlot, "Split", new Vector2(44f, 48f), "split");
+        InkUI.Centre((RectTransform)splitBtn.transform, new Vector2(SplitX, 0f), new Vector2(44f, 48f));
+        var sc = splitBtn.AddDrawing(new Vector2(36f, 36f)); sc.Seed = 9903;
+        InkDraw.Scissors(sc, InkUI.Ink);
+        splitBtn.hoverScale = 1.12f;
+        splitBtn.onClick = () => { if (strip != null) strip.SplitSelected(); };
+        splitBtn.gameObject.SetActive(false);
     }
 
     /// <summary>The arrows for a nudge of <paramref name="n"/>: a solid triangle each way; the active way's doubles at ±2 and boils.</summary>
@@ -1595,14 +1403,14 @@ public class InspectorCard : MonoBehaviour
     static void DrawTri(InkPath p, bool up, bool twice, bool on)
     {
         p.Clear();
-        Color c = on ? InkUI.Ink : Palette.A(InkUI.Ink, 0.55f);
-        float s = up ? 1f : -1f;
-        if (!twice) Tri(p, c, 0f, s);
-        else { Tri(p, c, 6.5f * s, s); Tri(p, c, -6.5f * s, s); }
+        float s = up ? 1f : -1f;   // E1: an ink outline at rest (as strong as the scissors beside it), filled once the note is nudged that way
+        if (!twice) Tri(p, on, 0f, s);
+        else { Tri(p, on, 6.5f * s, s); Tri(p, on, -6.5f * s, s); }
     }
-    static void Tri(InkPath p, Color c, float cy, float s)
+    static void Tri(InkPath p, bool fill, float cy, float s)
     {
-        p.Line(c, 2.6f, new Vector2(-8.5f, cy - 4.5f * s), new Vector2(0f, cy + 5.5f * s), new Vector2(8.5f, cy - 4.5f * s), new Vector2(-8.5f, cy - 4.5f * s));
+        Vector2 a = new Vector2(-8.5f, cy - 4.5f * s), b = new Vector2(0f, cy + 5.5f * s), c = new Vector2(8.5f, cy - 4.5f * s);
+        if (fill) p.Poly(InkUI.Ink, InkUI.Ink, 2.6f, a, b, c); else p.Loop(InkUI.Ink, 2.6f, a, b, c);
     }
 
     void NudgeClick(int dir)
@@ -1627,7 +1435,9 @@ public class InspectorCard : MonoBehaviour
         if (nudgeRt == null) return;
         var c = cube;
         int node = c != null && strip != null ? strip.SelectedNote : -1;
-        bool show = c != null && node >= 0 && node < c.nodes.Count && !c.IsDrums;
+        bool sel = c != null && node >= 0 && node < c.nodes.Count;
+        if (splitBtn != null && splitBtn.gameObject.activeSelf != sel) splitBtn.gameObject.SetActive(sel);   // E1: the scissors, for any selected note
+        bool show = sel && !c.IsDrums;
         if (nudgeRt.gameObject.activeSelf != show) nudgeRt.gameObject.SetActive(show);
         if (!show) { nudgeShownNode = -2; return; }
         int n = c.NudgeAt(node);
@@ -1641,19 +1451,23 @@ public class InspectorCard : MonoBehaviour
     public static InkButton NudgeButton(int dir) => I == null ? null : (dir > 0 ? I.nudgeUp : I.nudgeDown);
     public static int NudgeClicks { get; private set; }
     public static bool NudgeShown => I != null && I.nudgeRt != null && I.nudgeRt.gameObject.activeInHierarchy;
+    /// <summary>E1: the scissors beside higher / lower (shown only while a note is selected).</summary>
+    public static InkButton SplitButton => I != null ? I.splitBtn : null;
+    public static bool SplitShown => I != null && I.splitBtn != null && I.splitBtn.gameObject.activeInHierarchy;
 
     void UpdateWorldMark(float dt)
     {
         int node = strip.SelectedNote;
         var c = cube;
-        bool show = c != null && node >= 0 && node < c.nodes.Count && c.nodes[node] != null && want;
+        var markTile = c != null && node >= 0 && node < c.nodes.Count ? (c.span > 0 ? c.RealTile(node) : c.nodes[node]) : null;   // (a span cube: the tile the note sounds on)
+        bool show = markTile != null && want;
         if (!show) { if (worldMark != null && worldMark.gameObject.activeSelf) worldMark.gameObject.SetActive(false); return; }
         if (worldMark == null) BuildWorldMark();
         if (!worldMark.gameObject.activeSelf) { worldMark.gameObject.SetActive(true); markT = 0f; }
         markT += dt;
         float st = Look.Stepped(markT);
         float s = 0.95f + 0.07f * Mathf.Sin(st * 7f);
-        worldMark.position = c.nodes[node].Top + Vector3.up * 0.07f;
+        worldMark.position = markTile.Top + Vector3.up * 0.07f;
         worldMark.localScale = new Vector3(s, 1f, s);
     }
 
@@ -1700,7 +1514,12 @@ public class InspectorCard : MonoBehaviour
         return false;
     }
 
-    /// <summary>Delete / Backspace with a selected note: that note goes (the cube keeps at least one). False when no note is selected.</summary>
+    /// <summary>E1 (key S, the scissors): the selected note becomes two halves (RhythmStrip.SplitSelected); false when none is selected or it is refused.</summary>
+    public static bool SplitSelectedNote() => I != null && I.strip != null && I.cube != null && I.strip.SplitSelected();
+    /// <summary>E1 (key R): rest on / off for the selected note; false when none is selected.</summary>
+    public static bool RestSelectedNote() => I != null && I.strip != null && I.cube != null && I.strip.ToggleRestSelected();
+
+    /// <summary>Backspace with a selected note: that note goes (the cube keeps at least one). False when no note is selected.</summary>
     public static bool DeleteSelectedNote()
     {
         var c = I;
@@ -1712,22 +1531,36 @@ public class InspectorCard : MonoBehaviour
     // ================================================================== tests
     /// <summary>Hit targets on the card's face right now (active raycast targets outside the drawer and the popovers; the grid and the strip
     /// count once each, as they hit-test their cells / blocks themselves; the drawer tab counts once).</summary>
-    public static int FaceTargetCount()
+    public static int FaceTargetCount() => FaceTargets().Count;
+
+    /// <summary>E1 (tests): the names of the face's hit targets right now, in hierarchy order — at rest exactly: Chip, More, Volume, PathGrid,
+    /// RhythmStrip, Len0..Len4, Rest, Close, Delete (the size row counts one per size). A selected note adds "Tear" (the strip's trash can on its
+    /// block), Higher / Lower and Split, and the cube's Delete steps aside.</summary>
+    public static List<string> FaceTargets()
     {
-        var c = I; if (c == null || !c.card.gameObject.activeInHierarchy) return 0;
-        int n = 0;
+        var names = new List<string>(24);
+        var c = I; if (c == null || !c.card.gameObject.activeInHierarchy) return names;
         foreach (var g in c.card.GetComponentsInChildren<Graphic>(false))
         {
             if (!g.raycastTarget || !g.isActiveAndEnabled) continue;
-            if (g.transform.IsChildOf(c.drawerBody)) continue;
-            if (g == c.paper || g == c.drawerPaper) continue;
+            if (g.transform.IsChildOf(c.drawer)) continue;
+            if (g == c.paper) continue;
             if (g.transform.IsChildOf(c.grid.transform) && g.transform != c.grid.transform) continue;
             if (g.transform.IsChildOf(c.strip.transform) && g.transform != c.strip.transform) continue;
             if (Hints.EffectiveAlpha(g.rectTransform) < 0.5f) continue;
-            n++;
+            names.Add(g.name);
         }
-        if (c.strip.SelectedNote >= 0) n++;   // the strip's tear-off on the selected note (hit-tested by the strip)
-        return n;
+        if (c.strip.SelectedNote >= 0) names.Add("Tear");   // the strip's trash can on the selected note (hit-tested by the strip)
+        return names;
+    }
+
+    /// <summary>E1 (tests): the drawer's icons, in grid order (path · copies · devices).</summary>
+    public static List<InkButton> DrawerIcons()
+    {
+        var l = new List<InkButton>(24);
+        if (I == null || I.drawerBody == null) return l;
+        foreach (var b in I.drawerBody.GetComponentsInChildren<InkButton>(true)) l.Add(b);
+        return l;
     }
 
     /// <summary>Tests: the parts, as the pointer reaches them.</summary>
@@ -1747,8 +1580,7 @@ public class InspectorCard : MonoBehaviour
             case "stamp": return I.stampCard; case "up": return I.octUp; case "down": return I.octDown;
             case "gate0": return I.gateBtns[0]; case "gate1": return I.gateBtns[1]; case "gate2": return I.gateBtns[2];
         }
-        if (name.StartsWith("pace") && name.Length == 5) { int k = name[4] - '0'; if (k >= 0 && k < 5) return I.paceBtns[k]; }
-        return null;
+        return null;   // (E1: the legacy pace buttons and the necklace left the UI)
     }
     public static InkButton InstrumentButton(int k) => I != null && k >= 0 && k < Instruments.Count ? I.instBtns[k] : null;
     /// <summary>v6: the copy / paste → next buttons, the popover's voice chips (null when not shown) and how many it shows.</summary>
@@ -1760,7 +1592,8 @@ public class InspectorCard : MonoBehaviour
     public static int ChipVoice => I != null && I.cube != null ? ShownVoice(I.cube) : 0;
     public static RectTransform Popover => I != null ? I.instPop : null;
     public static HudSlider Fader => I != null ? I.fader : null;
-    public static NecklaceDial Dial => I != null ? I.dial : null;
+    /// <summary>E1: the necklace left the card (always null; kept for the old suites that ask).</summary>
+    public static NecklaceDial Dial => null;
     public static InkShape Bubble => I != null ? I.paper : null;
     /// <summary>The tail's tip in screen pixels (tests: it points at the proxy).</summary>
     public static Vector2 TailTipScreen => I != null && I.paper != null ? (Vector2)RectTransformUtility.WorldToScreenPoint(null, I.paper.rectTransform.TransformPoint(I.paper.TailTip)) : Vector2.zero;
@@ -1958,6 +1791,9 @@ public class InkPath : MaskableGraphic
     /// <summary>Pixels per drawing unit; ≤ 0 = half of min(width, height) (the unit box fills the rect).</summary>
     public float UnitPx { get => unitPx; set { if (unitPx != value) { unitPx = value; SetVerticesDirty(); } } }
     public int StrokeCount => strokes.Count;
+    /// <summary>E1: the standard symbol this path draws, when an InkDraw routine drew one ("cross", "trash", "more", "scissors"; null otherwise) —
+    /// what a check reads to tell that no destructive control wears the cross.</summary>
+    [NonSerialized] public string Glyph;
 
     public static InkPath Create(Transform parent, string name, Vector2 size)
     {
@@ -1970,7 +1806,7 @@ public class InkPath : MaskableGraphic
         return p;
     }
 
-    public InkPath Clear() { strokes.Clear(); pts.Clear(); open = -1; SetVerticesDirty(); return this; }
+    public InkPath Clear() { strokes.Clear(); pts.Clear(); open = -1; Glyph = null; SetVerticesDirty(); return this; }
     public InkPath Line(Color c, float w, params Vector2[] p) => Add(KLine, c, c, w, p);
     public InkPath Loop(Color c, float w, params Vector2[] p) => Add(KLoop, c, c, w, p);
     public InkPath Poly(Color fill, Color ink, float w, params Vector2[] p) => Add(KPoly, ink, fill, w, p);
@@ -2252,65 +2088,73 @@ public class InkButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHandle
     }
 }
 
-/// <summary>U2: the pictures of the card, the strip and the length row, drawn into an InkPath (unit box, y up; build time only).</summary>
+/// <summary>U2: the pictures of the card, the strip and the length row, drawn into an InkPath (build time only). The older ones use the unit box
+/// (-1..1, y up); the E1 drawer icons, the trash can and the scissors are in PIXELS around the centre (they set UnitPx = 1). Each standard symbol
+/// tags its InkPath (<see cref="InkPath.Glyph"/>: "cross", "trash", "more", "scissors") so a check can tell what a control draws.</summary>
 public static class InkDraw
 {
     static Vector2 V(float x, float y) => new Vector2(x, y);
-    static Vector2 Rot(Vector2 v, float deg) { float a = deg * Mathf.Deg2Rad, c = Mathf.Cos(a), s = Mathf.Sin(a); return new Vector2(v.x * c - v.y * s, v.x * s + v.y * c); }
-    static Vector2 Card(Vector2 centre, float w, float h, float deg, float u, float v) => centre + Rot(new Vector2(u * w * 0.5f, v * h * 0.5f), deg);
+    /// <summary>Clears <paramref name="p"/> for a drawing in pixels: 1 px per unit unless the path already carries a scale (the drawer's icons).</summary>
+    static InkPath Px(InkPath p) { p.Clear(); if (p.UnitPx <= 0f) p.UnitPx = 1f; return p; }
 
-    /// <summary>v6 copy: two paper cards, the back one askew, the front one carrying the pattern (three notes joined by a line in
-    /// <paramref name="col"/>).</summary>
-    public static void Copy(InkPath p, Color ink, Color paper, Color paperDeep, Color col)
+    /// <summary>E1 copy: the standard two sheets — a back sheet and a front sheet over its corner.</summary>
+    public static void Copy(InkPath p, Color ink, Color paper, Color paperDeep)
     {
-        p.Clear();
-        Vector2 b = V(-0.2f, 0.16f), f = V(0.12f, -0.1f);
-        float bw = 1.0f, bh = 0.78f, fw = 1.04f, fh = 0.8f, ba = -12f, fa = 5f;
-        p.Poly(paperDeep, ink, 2f, Card(b, bw, bh, ba, -1f, -1f), Card(b, bw, bh, ba, 1f, -1f), Card(b, bw, bh, ba, 1f, 1f), Card(b, bw, bh, ba, -1f, 1f));
-        p.Poly(paper, ink, 2.4f, Card(f, fw, fh, fa, -1f, -1f), Card(f, fw, fh, fa, 1f, -1f), Card(f, fw, fh, fa, 1f, 1f), Card(f, fw, fh, fa, -1f, 1f));
-        Vector2 n0 = Card(f, fw, fh, fa, -0.55f, -0.35f), n1 = Card(f, fw, fh, fa, 0f, 0.3f), n2 = Card(f, fw, fh, fa, 0.55f, -0.05f);
-        p.Line(ink, 4.4f, n0, n1, n2).Line(Comic.Opaque(col), 2.4f, n0, n1, n2);
-        p.Dot(ink, n0, 3.6f).Dot(ink, n1, 3.6f).Dot(ink, n2, 3.6f);
-        p.Dot(Comic.Opaque(col), n0, 2.3f).Dot(Comic.Opaque(col), n1, 2.3f).Dot(Comic.Opaque(col), n2, 2.3f);
+        Px(p);
+        p.Poly(paperDeep, ink, 2.2f, V(-15f, -7f), V(4f, -7f), V(4f, 16f), V(-15f, 16f));
+        p.Poly(paper, ink, 2.6f, V(-5f, -16f), V(15f, -16f), V(15f, 8f), V(-5f, 8f));
     }
 
-    /// <summary>v6 paste → next grid (v7 §21: it APPEARS there, nothing jumps between grids): the copied pattern (three notes joined by a line in
-    /// <paramref name="col"/>), a short arrow, the same pattern standing on the next grid (an isometric 2 × 2 tile) with a sparkle.</summary>
-    public static void PasteNext(InkPath p, Color ink, Color paper, Color paperDeep, Color col, Color spark)
+    /// <summary>E1 paste → next grid: the standard clipboard (a board with its clip) and an arrow leaving it to the right, in the cube's colour.</summary>
+    public static void PasteNext(InkPath p, Color ink, Color paper, Color col)
     {
-        p.Clear();
-        Color c = Comic.Opaque(col);
-        // the grid it lands on
-        Vector2 g = V(0.6f, -0.44f);
-        float hw = 0.54f, hh = 0.31f;
-        p.Poly(paper, ink, 2.4f, g + V(-hw, 0f), g + V(0f, hh), g + V(hw, 0f), g + V(0f, -hh));
-        p.Line(Palette.A(ink, 0.55f), 1.5f, g + V(-hw * 0.5f, hh * 0.5f), g + V(hw * 0.5f, -hh * 0.5f)).Line(Palette.A(ink, 0.55f), 1.5f, g + V(-hw * 0.5f, -hh * 0.5f), g + V(hw * 0.5f, hh * 0.5f));
-        // v7 §21 (nothing jumps between grids): the pattern APPEARS on the next grid — the copied pattern on the left, a short straight arrow,
-        // the same pattern standing on the grid with a sparkle where it popped in
-        Vector2 n0 = V(-1.06f, 0.36f), n1 = V(-0.84f, 0.68f), n2 = V(-0.6f, 0.46f);
-        p.Line(Palette.A(ink, 0.6f), 3.8f, n0, n1, n2).Line(Palette.A(c, 0.6f), 2f, n0, n1, n2);
-        p.Dot(Palette.A(ink, 0.6f), n0, 3.2f).Dot(Palette.A(ink, 0.6f), n1, 3.2f).Dot(Palette.A(ink, 0.6f), n2, 3.2f);
-        p.Line(ink, 2.4f, V(-0.42f, 0.2f), V(-0.04f, 0.2f));
-        ArrowHead(p, ink, 2.4f, V(0.04f, 0.2f), V(1f, 0f), 0.2f);
-        Vector2 m0 = g + V(-0.3f, -0.02f), m1 = g + V(-0.06f, 0.2f), m2 = g + V(0.2f, 0.06f);
-        p.Line(ink, 4.8f, m0, m1, m2).Line(c, 2.6f, m0, m1, m2);
-        p.Dot(ink, m0, 3.9f).Dot(ink, m1, 3.9f).Dot(ink, m2, 3.9f);
-        p.Dot(c, m0, 2.5f).Dot(c, m1, 2.5f).Dot(c, m2, 2.5f);
-        Vector2 sp = V(1.0f, 0.12f);
-        p.Line(spark, 2.4f, sp + V(-0.14f, 0f), sp + V(0.14f, 0f)).Line(spark, 2.4f, sp + V(0f, -0.14f), sp + V(0f, 0.14f));
+        Px(p);
+        p.Poly(paper, ink, 2.4f, V(-16f, -16f), V(3f, -16f), V(3f, 11f), V(-16f, 11f));
+        p.Poly(ink, ink, 1.4f, V(-11f, 8.5f), V(-2f, 8.5f), V(-2f, 14.5f), V(-11f, 14.5f));
+        p.Line(ink, 6.4f, V(-8f, -3f), V(10f, -3f)).Line(Comic.Opaque(col), 3f, V(-8f, -3f), V(10f, -3f));
+        p.Poly(Comic.Opaque(col), ink, 2f, V(9f, 4.5f), V(18f, -3f), V(9f, -10.5f));
     }
-
-
 
     public static void Cross(InkPath p, Color ink, float w)
     {
         p.Clear().Line(ink, w, V(-0.55f, -0.55f), V(0.55f, 0.55f)).Line(ink, w, V(-0.55f, 0.55f), V(0.55f, -0.55f));
+        p.Glyph = "cross";
+    }
+
+    /// <summary>E1: delete is a trash can, never the cross — the island "more" card's can (IslandHeader's tear-off): a tapered body in
+    /// <paramref name="can"/> with three ribs in <paramref name="rib"/>, a lid line and its handle; <paramref name="k"/> scales it (1 = 22 px tall).</summary>
+    public static void Trash(InkPath p, Color can, Color rib, float k)
+    {
+        Px(p);
+        p.Glyph = "trash";
+        p.Poly(can, can, 1.2f * k, V(-6.2f, 4.2f) * k, V(6.2f, 4.2f) * k, V(4.8f, -9.5f) * k, V(-4.8f, -9.5f) * k);
+        p.Line(can, 2.4f * k, V(-8.6f, 7f) * k, V(8.6f, 7f) * k);
+        p.Line(can, 2.2f * k, V(-2.6f, 9.8f) * k, V(2.6f, 9.8f) * k);
+        for (int i = -1; i <= 1; i++) p.Line(rib, 1.3f * k, V(i * 2.6f, 1.6f) * k, V(i * 2.1f, -6.6f) * k);
+    }
+
+    /// <summary>E1: split = a pair of scissors (two ring handles at the left, the blades crossing to the right).</summary>
+    public static void Scissors(InkPath p, Color ink)
+    {
+        Px(p);
+        p.Glyph = "scissors";
+        p.Arc(ink, 2.6f, V(-11f, 7.5f), 4.6f, 0f, 360f, 14).Arc(ink, 2.6f, V(-11f, -7.5f), 4.6f, 0f, 360f, 14);
+        p.Line(ink, 2.8f, V(-7.5f, 5f), V(16f, -8.5f)).Line(ink, 2.8f, V(-7.5f, -5f), V(16f, 8.5f));
+        p.Dot(ink, V(1.2f, 0f), 2.2f);
     }
 
     public static void Dots3(InkPath p, Color ink)
     {
-        p.Clear().UnitPx = 1f;
+        Px(p);
         p.Dot(ink, V(0f, 12f), 3.4f).Dot(ink, V(0f, 0f), 3.4f).Dot(ink, V(0f, -12f), 3.4f);
+    }
+
+    /// <summary>E1: "more" — the standard ⋯ (three ink dots in a row).</summary>
+    public static void DotsH(InkPath p, Color ink)
+    {
+        Px(p);
+        p.Glyph = "more";
+        p.Dot(ink, V(-13f, 0f), 4.2f).Dot(ink, V(0f, 0f), 4.2f).Dot(ink, V(13f, 0f), 4.2f);
     }
 
     public static void ArrowHead(InkPath p, Color ink, float w, Vector2 tip, Vector2 dir, float size)
@@ -2320,7 +2164,15 @@ public static class InkDraw
         p.Line(ink, w, tip - dir * size + n * size * 0.7f, tip, tip - dir * size - n * size * 0.7f);
     }
 
-    /// <summary>A pencil (yellow body, ink outline, a dark tip) lying on the diagonal.</summary>
+    /// <summary>A small chevron (∧ / ∨) at <paramref name="at"/> (px).</summary>
+    public static void Chevron(InkPath p, Color ink, Vector2 at, bool up)
+    {
+        float s = up ? 1f : -1f;
+        Px(p);
+        p.Line(ink, 2.6f, at + V(-5f, -3f * s), at + V(0f, 3f * s), at + V(5f, -3f * s));
+    }
+
+    /// <summary>A pencil (yellow body, ink outline, a dark tip) lying on the diagonal (unit box).</summary>
     public static void Pencil(InkPath p, Color ink, Color body)
     {
         p.Clear();
@@ -2332,43 +2184,45 @@ public static class InkDraw
         p.Line(ink, 2f, u * (t0 + 0.22f) + v * hw, u * (t0 + 0.22f) - v * hw);
     }
 
-    /// <summary>Two curved arrows chasing each other (the path turned around).</summary>
+    /// <summary>E1 reverse: the standard ⇄ — an arrow to the right over an arrow to the left.</summary>
     public static void Reverse(InkPath p, Color ink)
     {
-        p.Clear();
-        p.Arc(ink, 3f, V(0f, -0.18f), 0.62f, 160f, 28f, 14);
-        ArrowHead(p, ink, 3f, V(Mathf.Cos(28f * Mathf.Deg2Rad) * 0.62f, -0.18f + Mathf.Sin(28f * Mathf.Deg2Rad) * 0.62f), V(0.47f, -0.88f), 0.26f);
-        p.Arc(ink, 3f, V(0f, 0.18f), 0.62f, -20f, -152f, 14);
-        ArrowHead(p, ink, 3f, V(Mathf.Cos(-152f * Mathf.Deg2Rad) * 0.62f, 0.18f + Mathf.Sin(-152f * Mathf.Deg2Rad) * 0.62f), V(-0.47f, 0.88f), 0.26f);
+        Px(p);
+        p.Line(ink, 3f, V(-15f, 7f), V(12f, 7f));
+        ArrowHead(p, ink, 3f, V(15f, 7f), V(1f, 0f), 6f);
+        p.Line(ink, 3f, V(15f, -7f), V(-12f, -7f));
+        ArrowHead(p, ink, 3f, V(-15f, -7f), V(-1f, 0f), 6f);
     }
 
-    /// <summary>Loop: a closed track with beads, a chevron showing the way round.</summary>
+    /// <summary>E1 loop: a closed track with an arrowhead on it (the standard repeat).</summary>
     public static void ModeLoop(InkPath p, Color ink)
     {
-        p.Clear().Begin();
-        float r = 0.42f, x = 0.5f;
+        Px(p);
+        p.Begin();
+        float r = 9f, x = 8f;
         for (int i = 0; i <= 10; i++) { float a = (90f + 180f * i / 10f) * Mathf.Deg2Rad; p.P(-x + Mathf.Cos(a) * r, Mathf.Sin(a) * r); }
         for (int i = 0; i <= 10; i++) { float a = (-90f + 180f * i / 10f) * Mathf.Deg2Rad; p.P(x + Mathf.Cos(a) * r, Mathf.Sin(a) * r); }
-        p.EndLoop(ink, 2.6f);
-        p.Dot(ink, V(-x, r), 3.2f).Dot(ink, V(x, r), 3.2f).Dot(ink, V(0f, -r), 3.2f);
-        ArrowHead(p, ink, 2.4f, V(0.2f, r), V(1f, 0f), 0.2f);
+        p.EndLoop(ink, 2.8f);
+        ArrowHead(p, ink, 2.8f, V(4f, r), V(1f, 0f), 5.5f);
     }
 
-    /// <summary>Back and forth: a line with an arrowhead at both ends.</summary>
+    /// <summary>E1 back and forth: an arrow bouncing between two walls (|↔|).</summary>
     public static void ModePingPong(InkPath p, Color ink)
     {
-        p.Clear().Line(ink, 2.6f, V(-0.85f, 0f), V(0.85f, 0f));
-        ArrowHead(p, ink, 2.6f, V(-0.9f, 0f), V(-1f, 0f), 0.26f);
-        ArrowHead(p, ink, 2.6f, V(0.9f, 0f), V(1f, 0f), 0.26f);
-        p.Dot(ink, V(-0.35f, 0f), 3.2f).Dot(ink, V(0.3f, 0f), 3.2f);
+        Px(p);
+        p.Line(ink, 3.2f, V(-17f, -9f), V(-17f, 9f)).Line(ink, 3.2f, V(17f, -9f), V(17f, 9f));
+        p.Line(ink, 2.8f, V(-9f, 0f), V(9f, 0f));
+        ArrowHead(p, ink, 2.8f, V(-11.5f, 0f), V(-1f, 0f), 5.5f);
+        ArrowHead(p, ink, 2.8f, V(11.5f, 0f), V(1f, 0f), 5.5f);
     }
 
-    /// <summary>Once: a line that ends in a bar.</summary>
+    /// <summary>E1 once: an arrow that runs into a bar (→|).</summary>
     public static void ModeOnce(InkPath p, Color ink)
     {
-        p.Clear().Line(ink, 2.6f, V(-0.9f, 0f), V(0.62f, 0f)).Line(ink, 3.4f, V(0.8f, -0.42f), V(0.8f, 0.42f));
-        p.Dot(ink, V(-0.55f, 0f), 3.2f).Dot(ink, V(0.05f, 0f), 3.2f);
-        ArrowHead(p, ink, 2.4f, V(0.62f, 0f), V(1f, 0f), 0.2f);
+        Px(p);
+        p.Line(ink, 2.8f, V(-16f, 0f), V(7f, 0f));
+        ArrowHead(p, ink, 2.8f, V(10f, 0f), V(1f, 0f), 5.5f);
+        p.Line(ink, 3.2f, V(16.5f, -9f), V(16.5f, 9f));
     }
 
     /// <summary>A speaker cone with one sound arc.</summary>
@@ -2378,30 +2232,93 @@ public static class InkDraw
         p.Arc(ink, 2.2f, V(0.1f, 0f), 0.5f, -48f, 48f, 8);
     }
 
-    public static void Triangle(InkPath p, Color ink, bool up)
+    /// <summary>E1 flip: the standard mirror — a filled triangle over a dashed line, its hollow image below.</summary>
+    public static void Flip(InkPath p, Color ink, Color col)
+    {
+        Px(p);
+        p.Poly(Comic.Opaque(col), ink, 2.2f, V(-11f, 4.5f), V(11f, 4.5f), V(0f, 17f));
+        for (float x = -17f; x < 16f; x += 8f) p.Line(Palette.A(ink, 0.7f), 1.8f, V(x, 0f), V(x + 4f, 0f));
+        p.Loop(Palette.A(ink, 0.7f), 2f, V(-11f, -4.5f), V(11f, -4.5f), V(0f, -17f));
+    }
+
+    /// <summary>E1 climb: a little path whose top note reaches higher — one chevron over it per level (a faint one while off).</summary>
+    public static void Climb(InkPath p, Color ink, Color col, int level)
+    {
+        Px(p);
+        Color c = Comic.Opaque(col);
+        Vector2 a0 = V(-17f, -14f), a1 = V(-8f, -5f), a2 = V(0f, -12f), a3 = V(9f, -3f);
+        p.Line(ink, 4.6f, a0, a1, a2, a3).Line(c, 2.4f, a0, a1, a2, a3);
+        p.Dot(ink, a0, 3.6f).Dot(ink, a1, 3.6f).Dot(ink, a2, 3.6f).Dot(ink, a3, 4.2f);
+        p.Dot(c, a0, 2.2f).Dot(c, a1, 2.2f).Dot(c, a2, 2.2f).Dot(c, a3, 2.7f);
+        Color ch = level > 0 ? ink : Palette.A(ink, 0.4f);
+        for (int k = 0; k < Mathf.Max(1, level); k++) p.Line(ch, 2.4f, V(4f, 5f + 6f * k), V(9f, 10f + 6f * k), V(14f, 5f + 6f * k));
+    }
+
+    /// <summary>E1 harmony: a second note on the note's stem — the new one (in the cube's colour) above or below the ink one.</summary>
+    public static void Harmony(InkPath p, Color ink, Color col, bool above)
+    {
+        Px(p);
+        Vector2 lo = V(-3f, -10f), hi = V(-3f, 2f);
+        Vector2 own = above ? lo : hi, add = above ? hi : lo;
+        p.Line(ink, 2.6f, V(3.4f, -10f), V(3.4f, 17f));
+        p.Dot(ink, own, 6.2f);
+        p.Dot(ink, add, 6.4f).Dot(Comic.Opaque(col), add, 4.2f);
+        float s = above ? 1f : -1f;   // ∧ / ∨ beside the new note: which way the harmony goes
+        Vector2 at = V(15f, above ? 11f : -11f);
+        p.Line(ink, 2.6f, at + V(-5f, -3f * s), at + V(0f, 3f * s), at + V(5f, -3f * s));
+    }
+
+    /// <summary>E1 twin: ×2.</summary>
+    public static void Times2(InkPath p, Color ink)
+    {
+        Px(p);
+        p.Line(ink, 3f, V(-17f, -8f), V(-7f, 2f)).Line(ink, 3f, V(-17f, 2f), V(-7f, -8f));
+        p.Begin();
+        for (int i = 0; i <= 10; i++) { float a = Mathf.Lerp(170f, -38f, i / 10f) * Mathf.Deg2Rad; p.P(7.5f + Mathf.Cos(a) * 6.8f, 6f + Mathf.Sin(a) * 6.8f); }
+        p.P(1f, -11f).P(16f, -11f);
+        p.EndLine(ink, 3.2f);
+    }
+
+    /// <summary>E1 echo: ripples leaving a note — <paramref name="level"/> of the two arcs inked (the others faint).</summary>
+    public static void Echo(InkPath p, Color ink, Color col, int level)
+    {
+        Px(p);
+        Vector2 o = V(-14f, 0f);
+        p.Dot(ink, o, 5.6f).Dot(Comic.Opaque(col), o, 3.6f);
+        for (int k = 0; k < 2; k++) p.Arc(k < level ? ink : Palette.A(ink, 0.35f), 2.8f, o, 13f + 9f * k, -40f, 40f, 10);
+    }
+
+    /// <summary>E1 stamp: a rubber stamp (a knob, a neck, the pad in the cube's colour) over a ground line.</summary>
+    public static void Stamp(InkPath p, Color ink, Color paper, Color col)
+    {
+        Px(p);
+        p.Poly(paper, ink, 2.2f, V(-3.2f, 8f), V(3.2f, 8f), V(5.5f, -2f), V(-5.5f, -2f));
+        p.Dot(ink, V(0f, 11.5f), 6.6f).Dot(paper, V(0f, 11.5f), 4.4f);
+        p.Poly(Comic.Opaque(col), ink, 2.4f, V(-13f, -2f), V(13f, -2f), V(13f, -9.5f), V(-13f, -9.5f));
+        p.Line(Palette.A(ink, 0.6f), 2f, V(-17f, -15f), V(17f, -15f));
+    }
+
+    /// <summary>E1 octave: the music page's 8 with an arrow up or down (the cube plays an octave higher / lower).</summary>
+    public static void Octave(InkPath p, Color ink, bool up)
     {
         float s = up ? 1f : -1f;
-        p.Clear().Poly(ink, ink, 2f, V(-0.7f, -0.45f * s), V(0.7f, -0.45f * s), V(0f, 0.6f * s));
+        Px(p);
+        p.Arc(ink, 2.8f, V(-7f, 6.6f), 5f, 0f, 360f, 14).Arc(ink, 2.8f, V(-7f, -5.4f), 6.4f, 0f, 360f, 16);
+        p.Poly(ink, ink, 1.6f, V(5.5f, -5f * s), V(17f, -5f * s), V(11.25f, 6f * s));
     }
 
-    /// <summary>The octave ladder: two rails, three rungs; the rung of <paramref name="octave"/> (-1..1) is a fat rung in the cube's colour.</summary>
-    public static void Ladder(InkPath p, Color ink, Color fill, int octave)
+    /// <summary>E1 gate: two notes as bars — 0 short (two dots, a wide gap), 1 normal (two dashes), 2 long (one bar: the notes touch).</summary>
+    public static void Gate(InkPath p, Color ink, Color col, int kind)
     {
-        p.Clear().Line(ink, 2.4f, V(-0.42f, -0.95f), V(-0.42f, 0.95f)).Line(ink, 2.4f, V(0.42f, -0.95f), V(0.42f, 0.95f));
-        for (int k = -1; k <= 1; k++)
+        Px(p);
+        Color c = Comic.Opaque(col);
+        if (kind >= 2) { p.Line(ink, 9f, V(-13.5f, 0f), V(13.5f, 0f)).Line(c, 4.6f, V(-13.5f, 0f), V(13.5f, 0f)); return; }
+        float hl = kind == 0 ? 0.4f : 4.2f;
+        for (int k = -1; k <= 1; k += 2)
         {
-            float y = k * 0.55f;
-            if (k == octave) { p.Line(ink, 9f, V(-0.42f, y), V(0.42f, y)); p.Line(Comic.Opaque(fill), 5f, V(-0.4f, y), V(0.4f, y)); }
-            else p.Line(Palette.A(ink, 0.55f), 2f, V(-0.42f, y), V(0.42f, y));
+            float cx = k * 9.6f;
+            p.Line(ink, 9f, V(cx - hl, 0f), V(cx + hl, 0f)).Line(c, 4.6f, V(cx - hl, 0f), V(cx + hl, 0f));
         }
-    }
-
-    /// <summary>The stamp: an isometric tile with impact ticks (the cube presses it).</summary>
-    public static void StampTile(InkPath p, Color ink, Color tile)
-    {
-        p.Clear().Poly(tile, ink, 2.2f, V(-0.66f, -0.5f), V(0f, -0.2f), V(0.66f, -0.5f), V(0f, -0.8f));
-        p.Line(ink, 2f, V(-0.8f, -0.3f), V(-0.95f, -0.18f)).Line(ink, 2f, V(0.8f, -0.3f), V(0.95f, -0.18f));
-        p.Line(ink, 2f, V(-0.34f, 0.72f), V(-0.34f, 0.92f)).Line(ink, 2f, V(0.34f, 0.72f), V(0.34f, 0.92f));
     }
 
     public static void Sparkles(InkPath p, Color c)

@@ -45,9 +45,10 @@ public class HudShortcuts : MonoBehaviour
             } },
             new Section { title = "hand", rows = new[]
             {
-                new Entry("1 ... 0", "pick", "pick up"), new Entry("esc", "down", "put down"), new Entry("enter", "check", "finish"),
-                new Entry("delete", "cross", "delete"), new Entry("[ / ]", "size", "size"), new Entry(".", "dot", "dotted"),
+                new Entry("1 ... 0", "pick", "pick up"), new Entry("esc", "down", "put down"), new Entry("enter / rclick", "check", "finish"),   // Flow: Enter or a right-click (Esc too: every exit keeps the notes)
+                new Entry("delete", "trash", "delete"), new Entry("[ / ]", "size", "size"), new Entry(".", "dot", "dotted"),
                 new Entry("wheel", "size", "size"), new Entry("alt + click", "stack", "stack"), new Entry("space", "loop", "hear it"),
+                new Entry("r", "rest", "rest"),   // Flow: a rest of the brush size while drawing
             } },
         },
         new[]
@@ -57,7 +58,7 @@ public class HudShortcuts : MonoBehaviour
                 new Entry("shift + up / down", "octave", "octave copy"), new Entry("alt + up / down", "harmony", "harmony"),
                 new Entry("u", "flip", "flip"), new Entry("up / down", "ladder", "octave"), new Entry("t", "twin", "twin"),
                 new Entry("w", "shadow", "shadow"), new Entry("g", "stamp", "stamp (hold: all)"),
-                new Entry("- / =", "hits", "hits"), new Entry("e", "spot", "spotlight"),
+                new Entry("e", "spot", "spotlight"), new Entry("delete", "trash", "delete cube"),   // Flow E1: Delete = the cube (the necklace's − / = left the sheet with its UI)
             } },
             new Section { title = "clipboard", rows = new[]
             {
@@ -72,7 +73,7 @@ public class HudShortcuts : MonoBehaviour
             new Section { title = "grids", rows = new[]
             {
                 new Entry("shift + drag", "select", "select"), new Entry("cmd + c", "copy", "copy grids"), new Entry("cmd + v", "paste", "paste after"),
-                new Entry("delete", "cross", "delete grids"), new Entry("shift + up / down", "tower", "octave"), new Entry("shift + right", "buildup", "build-up"),
+                new Entry("delete", "trash", "delete grids"), new Entry("shift + up / down", "tower", "octave"), new Entry("shift + right", "buildup", "build-up"),
                 new Entry("n", "moon", "drums"), new Entry("i", "deck", "deck"),
             } },
             new Section { title = "song", rows = new[]
@@ -88,6 +89,11 @@ public class HudShortcuts : MonoBehaviour
                 new Entry("w / a / s / d", "move", "move"), new Entry("left / right", "move", "move"), new Entry("q / e", "orbit", "orbit"),
                 new Entry("tab", "next", "next grid"), new Entry("shift + tab", "prev", "back a grid"), new Entry("c", "reset", "reset view"),
                 new Entry("o", "all", "see all"), new Entry("f", "follow", "follow"),
+            } },
+            // Flow E1: the cube card's selected note (click a note on its strip first)
+            new Section { title = "note", rows = new[]
+            {
+                new Entry("s", "scissors", "split"), new Entry("r", "rest", "rest"), new Entry("backspace", "trash", "delete note"),
             } },
         },
     };
@@ -236,7 +242,7 @@ public class HudShortcuts : MonoBehaviour
         var wrt = w.rectTransform; wrt.anchorMin = wrt.anchorMax = new Vector2(0f, 0.5f); wrt.pivot = new Vector2(0f, 0.5f); wrt.anchoredPosition = new Vector2(gx + 38f, 1f);
     }
 
-    static bool Drawn(string k) => k == "cmd" || k == "shift" || k == "alt" || k == "up" || k == "down" || k == "left" || k == "right" || k == "wheel" || k == "drag";
+    static bool Drawn(string k) => k == "cmd" || k == "shift" || k == "alt" || k == "up" || k == "down" || k == "left" || k == "right" || k == "wheel" || k == "drag" || k == "rclick";
 
     /// <summary>A key cap: inked paper with a lip, the key's letter / word in lowercase Fredoka, or its drawn symbol.</summary>
     InkShape Cap(Transform parent, string k, float x)
@@ -306,6 +312,13 @@ public class HudShortcuts : MonoBehaviour
                 p.Line(c + new Vector2(0f, 7f), c + new Vector2(0f, 2f), 2.2f, ink, true);
                 p.Head(c + new Vector2(12f, 6f), Vector2.up, 4f, 5f, ink); p.Head(c + new Vector2(12f, -6f), Vector2.down, 4f, 5f, ink);
                 break;
+            case "rclick":
+                // a mouse, its RIGHT button inked in
+                p.RoundRect(new Rect(c.x - 6.5f, c.y - 9f, 13f, 18f), 6f, Comic.Cream, 1.5f, ink);
+                p.RoundRect(new Rect(c.x + 0.5f, c.y + 0.5f, 5.5f, 8f), 2.5f, ink);
+                p.Line(c + new Vector2(0f, 8.5f), c + new Vector2(0f, 0.5f), 1.3f, ink);
+                p.Line(c + new Vector2(-6f, 0.5f), c + new Vector2(6f, 0.5f), 1.3f, ink);
+                break;
             case "drag":
                 p.RoundRect(new Rect(c.x - 12f, c.y - 7f, 20f, 13f), 2f, Comic.A(Comic.Cyan, 0.25f), 1.3f, ink, 3f, 2f);
                 p.Head(c + new Vector2(13f, -8f), new Vector2(1f, -1f), 5f, 5f, ink);
@@ -339,6 +352,16 @@ public class HudShortcuts : MonoBehaviour
             case "pick": p.Cube(c + new Vector2(0f, 2f), 16f, col, ink, 1.4f); p.Line(c + new Vector2(-8f, -10f), c + new Vector2(8f, -10f), 1.2f, Comic.A(ink, 0.5f)); break;
             case "down": p.Cube(c + new Vector2(0f, -3f), 15f, Comic.A(col, 0.5f), Comic.A(ink, 0.6f), 1.2f, true); p.Head(c + new Vector2(0f, 7f), Vector2.down, 5f, 6f, ink); break;
             case "check": p.Line(c + new Vector2(-8f, 0f), c + new Vector2(-2f, -6f), 2.6f, ink, true); p.Line(c + new Vector2(-2f, -6f), c + new Vector2(9f, 7f), 2.6f, ink, true); break;
+            case "rest": p.Cube(c, 17f, col, ink, 1.5f, true); break;   // the hollow cube (the length row's rest)
+            case "trash":   // Flow E1: delete = a trash can, never the cross (the island ⋯ card's can)
+                pts.Clear(); pts.Add(c + new Vector2(-6f, 4f)); pts.Add(c + new Vector2(6f, 4f)); pts.Add(c + new Vector2(4.6f, -9f)); pts.Add(c + new Vector2(-4.6f, -9f));
+                p.InkFill(pts, 4, InkUI.Red, 1.6f, ink);
+                p.Line(c + new Vector2(-8.5f, 6.8f), c + new Vector2(8.5f, 6.8f), 2.2f, ink, true); p.Line(c + new Vector2(-2.5f, 9.6f), c + new Vector2(2.5f, 9.6f), 2f, ink, true);
+                break;
+            case "scissors":   // Flow E1: split
+                p.Arc(c + new Vector2(-8f, 5.5f), 3.4f, 1.8f, ink); p.Arc(c + new Vector2(-8f, -5.5f), 3.4f, 1.8f, ink);
+                p.Line(c + new Vector2(-5.5f, 3.6f), c + new Vector2(11f, -6f), 2f, ink, true); p.Line(c + new Vector2(-5.5f, -3.6f), c + new Vector2(11f, 6f), 2f, ink, true);
+                break;
             case "cross": p.Line(c + new Vector2(-6f, -6f), c + new Vector2(6f, 6f), 2.6f, InkUI.Red, true); p.Line(c + new Vector2(-6f, 6f), c + new Vector2(6f, -6f), 2.6f, InkUI.Red, true); break;
             case "size": p.Cube(c + new Vector2(-7f, -4f), 9f, col, ink, 1.1f); p.Cube(c + new Vector2(5f, 1f), 17f, col, ink, 1.3f); break;
             case "dot": p.Cube(c + new Vector2(-2f, 0f), 15f, col, ink, 1.3f); p.Disc(c + new Vector2(10f, 7f), 3f, ink); p.Disc(c + new Vector2(10f, 7f), 1.8f, Comic.Cream); break;

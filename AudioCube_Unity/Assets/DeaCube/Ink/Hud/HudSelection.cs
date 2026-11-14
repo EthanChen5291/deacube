@@ -14,13 +14,20 @@ using UnityEngine;
 /// call = one History entry (O); the selection follows its grids (O re-selects), the bar hides when it empties. The keys (UIManager): Cmd+C /
 /// Cmd+V / Delete / Shift+↑ / Shift+↓ act on the selection when there is one, Shift+→ toggles the build-up. The grids' own look (outline,
 /// lift, shimmer) is W's (SelectionFx). Hints id "selectionBar".
+/// Flow E2 (a quiet world — the owner: "BE SIMPLE AND MINIMALISTIC"): the bar DRAWS FOUR — copy, paste, repeat and the trash can (delete: never
+/// ✕). Duplicate, the octaves, extend, the build-up and lead keep their actions (<see cref="Do"/>: the keys Shift+↑ / Shift+↓ / Shift+→, and
+/// each island's ⋯ card) but are no longer on the bar.
 /// </summary>
 public class HudSelection : MonoBehaviour
 {
     public static HudSelection I;
     public enum Act { Copy, Paste, Duplicate, Delete, OctaveUp, OctaveDown, Repeat, Extend, Launch, Lead }
     public static readonly string[] Captions = { "copy grids", "paste after", "duplicate", "delete", "octave up", "octave down", "repeat", "extend through", "build-up", "lead · spotlight" };
-    public const float Btn = 46f, Pad = 12f, GroupGap = 14f, H = 66f, Above = 18f;
+    public const float Btn = 46f, Pad = 14f, GroupGap = 14f, H = 66f, Above = 18f;
+    /// <summary>Flow E2: the four the bar draws, left to right (the others stay on their keys and on each island's ⋯ card).</summary>
+    public static readonly Act[] Drawn = { Act.Copy, Act.Paste, Act.Repeat, Act.Delete };
+    /// <summary>The bar draws <paramref name="a"/>.</summary>
+    public static bool IsDrawn(Act a) => Array.IndexOf(Drawn, a) >= 0;
     /// <summary>Screen bands kept free (reference px): the column rail on top, the transport / deck at the bottom.</summary>
     public const float TopBand = 90f, BottomBand = 130f;
 
@@ -61,7 +68,7 @@ public class HudSelection : MonoBehaviour
     // ================================================================== build
     void BuildParts()
     {
-        width = Pad * 2f + Btn * btns.Length + GroupGap * 2f;
+        width = Pad * 2f + Btn * Drawn.Length + GroupGap * (Drawn.Length - 1);
         rt = InkUI.Node("Card", root);
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(width, H);
@@ -72,11 +79,10 @@ public class HudSelection : MonoBehaviour
         paper.raycastTarget = true;   // the card eats clicks between its buttons (no world pick through it)
         paper.Radius = 18f; paper.SetInk(2.2f, 3.8f); paper.Wobble = 1.2f; paper.ShadowOffset = new Vector2(6f, -7f); paper.ShadowColor = Comic.PrintShadow;
         paper.TailWidth = 22f; paper.Seed = 9403; paper.RotJitter = 0.5f;
-        float x = -width * 0.5f + Pad;
         for (int i = 0; i < btns.Length; i++)
         {
-            if (i == 4 || i == 6) x += GroupGap;
-            int ii = i;
+            int ii = i, slot = Array.IndexOf(Drawn, (Act)i);
+            float x = -width * 0.5f + Pad + Mathf.Max(0, slot) * (Btn + GroupGap);
             var b = InkButton.Create(rt, ((Act)i).ToString(), new Vector2(Btn, Btn), Captions[i]);
             InkUI.Centre((RectTransform)b.transform, new Vector2(x + Btn * 0.5f, 0f), new Vector2(Btn, Btn));
             b.hoverScale = 1.12f;
@@ -87,7 +93,7 @@ public class HudSelection : MonoBehaviour
             arts[i].onPaint = p => Paint(p, (Act)ii);
             b.onClick = () => Do((Act)ii);
             btns[i] = b;
-            x += Btn;
+            if (slot < 0) b.gameObject.SetActive(false);   // Flow E2: not drawn (its action stays: Do — the keys, the islands' ⋯ cards)
         }
         Hints.Register("selectionBar", rt);
         rt.gameObject.SetActive(false);
@@ -343,16 +349,7 @@ public class HudSelection : MonoBehaviour
                 p.Line(c + new Vector2(12f, 9f), c + new Vector2(12f, 15f), 1.6f, Comic.Pop, true);
                 p.Line(c + new Vector2(9f, 12f), c + new Vector2(15f, 12f), 1.6f, Comic.Pop, true);
                 break;
-            case Act.Delete:
-            {
-                pts.Clear();
-                for (int k = 0; k < 4; k++) { float an = (45f + 90f * k + (k == 1 ? 6f : 0f)) * Mathf.Deg2Rad; pts.Add(c + new Vector2(Mathf.Cos(an), Mathf.Sin(an)) * 13f); }
-                p.Shift = new Vector2(2f, -2.5f); p.Fill(pts, 4, Comic.A(Comic.Ink, 0.85f)); p.Shift = Vector2.zero;
-                p.InkFill(pts, 4, InkUI.Red, 1.8f, Comic.Ink);
-                p.Line(c + new Vector2(-4.5f, -4.5f), c + new Vector2(4.5f, 4.5f), 2.6f, Comic.Cream, true);
-                p.Line(c + new Vector2(-4.5f, 4.5f), c + new Vector2(4.5f, -4.5f), 2.6f, Comic.Cream, true);
-                break;
-            }
+            case Act.Delete: IslandHeader.PaintTrash(p, c, 0.95f); break;   // delete = the trash can (the island ⋯ card's), never the cross
             case Act.OctaveUp:
             case Act.OctaveDown:
             {

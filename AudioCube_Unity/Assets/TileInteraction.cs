@@ -18,6 +18,9 @@ using UnityEngine.Rendering;
 /// v7 (D; B: "a phrase can have cols x 15 tiles — 8 measures of 16ths = 1920"): a tile AT REST switches its Update off (hover, press, flash,
 /// highlight and the key spring settled and applied) and any of them wakes it, so thousands of idle cells cost nothing per frame. Stairs steps
 /// and phrase cells keep their own look (no drum clothes), like keyboard keys.
+/// Flow E2 (a quiet world — DeaCube/QuietGrids.cs): a tile of a grid AT REST (an empty grid, or one that repeats the grid before it) lies lower —
+/// flush with its grid's lowest tile — and a step paler (<see cref="SetQuiet"/>), and rises back when its grid wakes. Visual only: <see cref="Top"/>,
+/// the pitch and the collider stay where they are.
 /// </summary>
 public class TileInteraction : MonoBehaviour
 {
@@ -106,7 +109,46 @@ public class TileInteraction : MonoBehaviour
     }
     public void Flash(Color c, float strength = 1f) { flashColor = c; flash = Mathf.Max(flash, strength); Wake(); }
 
-    public void ResetTile() { press = 0f; flash = 0f; hover = 0f; hoverTarget = 0f; hl = 0f; hlTarget = 0f; keyT = 9f; highlight = Highlight.None; transform.localPosition = restLocal; Apply(); }
+    public void ResetTile() { press = 0f; flash = 0f; hover = 0f; hoverTarget = 0f; hl = 0f; hlTarget = 0f; keyT = 9f; highlight = Highlight.None; transform.localPosition = restLocal - Vector3.up * (quiet * quietDrop); Apply(); }
+
+    // ------------------------------------------------------------------ Flow E2: the quiet look (a grid at rest)
+    float quiet, quietTarget, quietDrop; BoxCollider quietCol; Vector3 quietColCentre; bool quietColKnown;
+    /// <summary>Flow E2: the quiet look now (0 normal … 1 at rest), its goal, and how far below its rest pose the tile lies at 1 (world units).</summary>
+    public float Quiet => quiet;
+    public float QuietTarget => quietTarget;
+    public float QuietDrop => quietDrop;
+    /// <summary>The height of the tile's rest pose in its grid (local y; the pitch staircase).</summary>
+    public float RestY => restLocal.y;
+    /// <summary>How much of its own colour a tile keeps at the full quiet look, and how far it lightens ("a step desaturated").</summary>
+    public const float QuietKeep = 0.62f, QuietLighten = 0.14f;
+    /// <summary>Flow E2: <paramref name="amount"/> 1 = the tile rests <paramref name="drop"/> lower and a step paler, 0 = normal; it eases there
+    /// (<paramref name="instant"/>: at once). VISUAL ONLY — <see cref="Top"/>, the pitch and the collider keep their place (a click or a ray lands
+    /// where it always did), nothing is saved.</summary>
+    public void SetQuiet(float amount, float drop, bool instant = false)
+    {
+        amount = Mathf.Clamp01(amount); drop = Mathf.Max(0f, drop);
+        if (!instant && Mathf.Approximately(amount, quietTarget) && Mathf.Approximately(drop, quietDrop)) return;
+        quietTarget = amount; quietDrop = drop;
+        if (instant) { quiet = amount; PoseQuiet(0f); Apply(); }
+        Wake();
+    }
+    /// <summary>The colour <paramref name="c"/> takes at the quiet look <paramref name="amount"/>: toward its own grey, a little lighter.</summary>
+    public static Color QuietColor(Color c, float amount)
+    {
+        if (amount <= 0f) return c;
+        float l = c.r * 0.3f + c.g * 0.59f + c.b * 0.11f;
+        Color pale = Color.Lerp(Color.Lerp(new Color(l, l, l * 1.03f, c.a), c, QuietKeep), new Color(1f, 1f, 1f, c.a), QuietLighten);
+        return Color.Lerp(c, pale, amount);
+    }
+    /// <summary>The tile's pose: its rest (lower by the quiet look) plus <paramref name="lift"/>; the collider stays at the real rest pose.</summary>
+    void PoseQuiet(float lift)
+    {
+        float down = quiet * quietDrop;
+        transform.localPosition = restLocal + Vector3.up * (lift - down);
+        if (down <= 0f && !quietColKnown) return;
+        if (!quietColKnown) { quietCol = GetComponent<BoxCollider>(); quietColCentre = quietCol != null ? quietCol.center : Vector3.zero; quietColKnown = true; }
+        if (quietCol != null) quietCol.center = quietColCentre + Vector3.up * (down / Mathf.Max(1e-4f, transform.localScale.y));
+    }
 
     /// <summary>v7: true while the tile animates (its Update runs); a tile at rest sleeps until hover / press / flash / highlight wake it (tests).</summary>
     public bool Animating => enabled;
@@ -114,7 +156,7 @@ public class TileInteraction : MonoBehaviour
     public static int Sleeps;
     /// <summary>v7 (K's live keyboard range / any live re-lay): the tile's rest pose moves to <paramref name="local"/> (its parent's space); Top and the
     /// hover / press animation follow from there.</summary>
-    public void RestAt(Vector3 local) { restLocal = local; transform.localPosition = local; Wake(); }
+    public void RestAt(Vector3 local) { restLocal = local; transform.localPosition = local - Vector3.up * (quiet * quietDrop); Wake(); }
 
     /// <summary>v7: wakes the per-frame animation — never the tiles of a sinking husk (SongManager disables them with their island).</summary>
     void Wake() { if (!enabled && (island == null || island.enabled)) enabled = true; }
@@ -130,13 +172,16 @@ public class TileInteraction : MonoBehaviour
         hlTarget = highlight == Highlight.None ? 0f : 1f;
         hl = Mathf.Lerp(hl, hlTarget, 1f - Mathf.Exp(-dt * 16f));
         if (keyT < KeySpringSeconds) keyT += dt;
+        if (quiet != quietTarget) quiet = Mathf.MoveTowards(Mathf.Lerp(quiet, quietTarget, 1f - Mathf.Exp(-dt * 9f)), quietTarget, dt * 0.5f);   // Flow E2
         // v7: settled (within a hair of the targets, no press, no key spring) -> snap to the targets, apply once more and sleep
-        bool settled = Mathf.Abs(hover - hoverTarget) < 2e-3f && press <= 0f && flash < 2e-3f && Mathf.Abs(hl - hlTarget) < 2e-3f && keyT >= KeySpringSeconds;
-        if (settled) { hover = hoverTarget; flash = 0f; hl = hlTarget; }
+        bool settled = Mathf.Abs(hover - hoverTarget) < 2e-3f && press <= 0f && flash < 2e-3f && Mathf.Abs(hl - hlTarget) < 2e-3f && keyT >= KeySpringSeconds
+                       && Mathf.Abs(quiet - quietTarget) < 2e-3f;
+        if (settled) { hover = hoverTarget; flash = 0f; hl = hlTarget; quiet = quietTarget; }
         float sink = pressDepth * Ease.InQuad(press) + KeySink;   // v6: + the key spring (sink, spring back, a small overshoot)
         // v8 ("when hovering over keys the piano notes should go down not up"): a keyboard's key dips under the pointer like a finger resting on it
         float hoverY = island != null && island.IsKeyboard ? -hover * KeyHoverDip : hover * 0.09f;
-        transform.localPosition = restLocal + Vector3.up * (hoverY - sink);
+        if (quiet > 0f || quietColKnown) PoseQuiet(hoverY - sink);   // Flow E2: a grid at rest lies flush (the collider keeps its place)
+        else transform.localPosition = restLocal + Vector3.up * (hoverY - sink);
         Apply();
         if (settled) { enabled = false; Sleeps++; }
     }
@@ -214,6 +259,7 @@ public class TileInteraction : MonoBehaviour
     {
         if (rend == null) return;
         Color c = restTintAmt > 0f ? Color.Lerp(baseColor, restTint, restTintAmt) : baseColor;
+        if (quiet > 0f) c = QuietColor(c, quiet);   // Flow E2: a grid at rest is a step paler
         Color em = Color.black;
         Color hlColor = highlight == Highlight.Start ? Palette.Ok : Palette.Accent;
         float hlAmt = (highlight == Highlight.Candidate ? 0.32f : (highlight == Highlight.None ? 0f : 0.65f)) * hl;

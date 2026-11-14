@@ -25,6 +25,14 @@ using UnityEngine.UI;
 /// the grid is ("3 / 4 beats"; "capacity reached" when a note was refused) and, then, an EXPAND chip above its right corner (+ one measure:
 /// PathManager.ExpandDrawGrid). While a melody PHRASE is drawn (a cube in the hand) the row floats over the phrase the same way (<see cref="Where.Phrase"/>:
 /// sizes, hear it, fill, expand; no done tick — each stroke is already in the song).
+/// Flow (2026-11-13, SPEC flow §2 "no words"): with PathManager.Flow the draft row carries NO text — no fill tab, no "capacity reached", no
+/// EXPAND chip (a melody that outgrows its grid walks on; the grids' beat pips carry the fill) — and it gains the REST cube (the inspector's
+/// hollow cube, here: PathManager.AddRest — a rest of the brush size at the draft's end; R does the same) between the sizes and the done tick.
+/// It floats over the grid the melody's last note stands on (it follows the melody through its lane).
+/// Flow E1 (2026-11-13): INSPECTING, the row is on the card always (Show(cube, -1) at rest). With NO note selected it is the size of the NEXT
+/// note — a pick sets the brush (PathManager.SetBrush: what a click on the card's flat grid adds) and the hollow cube adds a REST of that size
+/// at the pattern's end (RhythmStrip.AppendRest); with a note selected it is that note's size as before (a pick also becomes the brush, so the
+/// notes inserted after it come in the size just chosen) and the hollow cube is its rest on / off.
 /// </summary>
 [DefaultExecutionOrder(-50)]   // PointerOver is fresh before PathManager reads it (a press on the row must not finish the draft)
 public class DurationPicker : MonoBehaviour
@@ -35,6 +43,8 @@ public class DurationPicker : MonoBehaviour
     /// <summary>PlayerPrefs: drafts that showed the [ ] . keycaps (they show for the first two).</summary>
     public const string PrefKeysShown = "deacube.lengthKeys";
     public const float Gap = 10f, RowW = 300f, RowH = 78f, ShelfY = -22f, KeysH = 30f, AboveIslandPx = 14f;
+    /// <summary>Flow: how much wider the draft row is for its rest cube.</summary>
+    public const float FlowExtraW = 38f;
     /// <summary>Screen bands kept free when there is a choice (the column rail on top, the transport / deck at the bottom; 1080p units).</summary>
     public const float TopBand = 84f, BottomBand = 120f;
 
@@ -84,7 +94,7 @@ public class DurationPicker : MonoBehaviour
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { I = null; IsShown = false; SelectedTicks = 24; PickCount = 0; }
+    static void ResetStatics() { I = null; IsShown = false; SelectedTicks = 24; PickCount = 0; RestCount = 0; }
 
     // ------------------------------------------------------------------ parts
     RectTransform row, keys, restRt;
@@ -107,6 +117,7 @@ public class DurationPicker : MonoBehaviour
     Where mode = Where.Hidden;
     AudioCube cube; int node = -1, shownTicks = int.MinValue, selSize = 2; bool selDotted;
     bool pointerOver, below; float popT, anchorY = float.NaN;
+    bool flowRow; float restX, loopX;   // Flow drafting: the rest cube shows beside the done tick (the row is FlowExtraW wider)
     AudioCube lastDraft;
     Vector2 lastTail = new Vector2(float.NaN, float.NaN);
     static readonly Vector3[] corners = new Vector3[4];
@@ -165,7 +176,12 @@ public class DurationPicker : MonoBehaviour
         restCube = CubeGlyph.Create(restBtn.body, "Cube", Color.white, 26f);
         restCube.raycastTarget = false; restCube.Hollow = true;
         ((RectTransform)restCube.transform).anchoredPosition = new Vector2(0f, ShelfY + 15f);
-        restBtn.onClick = () => { if (mode == Where.Inspector && cube != null) { RhythmStrip.ApplyRest(cube, node); PickCount++; shownTicks = int.MinValue; } };
+        restBtn.onClick = () =>
+        {
+            if (mode == Where.Inspector && cube != null && node >= 0) { RhythmStrip.ApplyRest(cube, node); PickCount++; shownTicks = int.MinValue; }
+            else if (mode == Where.Inspector && cube != null) { if (RhythmStrip.AppendRest(cube, CurrentTicks())) { RestCount++; InkUI.Hop(restCube, 0.4f); } }   // E1: no note selected — a rest of the brush size at the end
+            else if (mode == Where.Draft && PathManager.I != null && PathManager.I.AddRest()) { RestCount++; InkUI.Hop(restCube, 0.4f); }   // Flow: a rest at the draft's end
+        };
         // v6 drafting: the done tick (a cream disc with an inked check) finishes the draft
         doneBtn = InkButton.Create(row, "Done", new Vector2(36f, 70f), "done");
         InkUI.Centre((RectTransform)doneBtn.transform, new Vector2(total * 0.5f + 34f, 0f), new Vector2(36f, 70f));
@@ -178,6 +194,8 @@ public class DurationPicker : MonoBehaviour
         ((RectTransform)tick.transform).anchoredPosition = new Vector2(0f, ShelfY + 16f);
         doneBtn.onClick = () => { var pm = PathManager.I; if (mode == Where.Draft && pm != null && pm.IsDrawing) { pm.FinishPath(); DoneCount++; } };
         doneBtn.gameObject.SetActive(false);
+        Hints.Register("draft.done", (RectTransform)doneBtn.transform);
+        restX = total * 0.5f + 34f; loopX = -total * 0.5f - 34f;
         BuildDrawParts(total);
         BuildKeys();
         Hints.Register("draft.lengths", row);
@@ -245,8 +263,9 @@ public class DurationPicker : MonoBehaviour
         if (loopBtn.gameObject.activeSelf != drawing) loopBtn.gameObject.SetActive(drawing);
         if (drawing) loopBtn.Active = pm.DrawLoopOn;
         string t = "";
-        bool full = drawing && pm.CapacityReached;
-        float cap = drawing ? pm.DrawCapacityBeats : 0f;
+        bool flow = mode == Where.Draft && PathManager.FlowOn;   // Flow: no words (the pips carry the fill), never full
+        bool full = drawing && !flow && pm.CapacityReached;
+        float cap = drawing && !flow ? pm.DrawCapacityBeats : 0f;
         if (full) t = "capacity reached";
         else if (cap > 0f) t = Beats(pm.DrawUsedBeats) + " / " + Beats(cap) + " beats";
         bool tab = t.Length > 0;
@@ -310,6 +329,7 @@ public class DurationPicker : MonoBehaviour
         row.anchoredPosition = new Vector2(-26f, -2f);   // the five cubes + the rest cube, centred
         row.localRotation = Quaternion.identity;
         bubble.gameObject.SetActive(false);
+        flowRow = false;
         restBtn.gameObject.SetActive(true);
         doneBtn.gameObject.SetActive(false);
         keys.gameObject.SetActive(false);
@@ -330,7 +350,8 @@ public class DurationPicker : MonoBehaviour
         row.pivot = new Vector2(0.5f, 0f);
         row.localRotation = Quaternion.identity;
         bubble.gameObject.SetActive(true);
-        restBtn.gameObject.SetActive(false);
+        flowRow = PathManager.FlowOn;
+        restBtn.gameObject.SetActive(flowRow);   // Flow: the hollow cube = a rest at the draft's end
         doneBtn.gameObject.SetActive(true);
         if (fresh)
         {
@@ -356,6 +377,7 @@ public class DurationPicker : MonoBehaviour
         row.pivot = new Vector2(0.5f, 0f);
         row.localRotation = Quaternion.identity;
         bubble.gameObject.SetActive(true);
+        flowRow = false;
         restBtn.gameObject.SetActive(false);
         doneBtn.gameObject.SetActive(false);
         keys.gameObject.SetActive(false);
@@ -368,14 +390,17 @@ public class DurationPicker : MonoBehaviour
     void SizeRow()
     {
         bool withKeys = keys.gameObject.activeSelf;
-        row.sizeDelta = new Vector2(RowW, RowH + (withKeys ? KeysH : 0f));
+        // Flow drafting: the row is one control wider (the rest cube, then the done tick) and its content shifts half of that to the left
+        float wide = flowRow ? FlowExtraW : 0f, sx = -wide * 0.5f;
+        row.sizeDelta = new Vector2(RowW + wide, RowH + (withKeys ? KeysH : 0f));
         // content sits in the upper RowH; the keycaps under it
         float lift = withKeys ? KeysH * 0.5f : 0f;
-        foreach (var b in slots) { var r = (RectTransform)b.transform; r.anchoredPosition = new Vector2(r.anchoredPosition.x, lift); }
-        restRt.anchoredPosition = new Vector2(restRt.anchoredPosition.x, lift);
-        var doneRt = (RectTransform)doneBtn.transform; doneRt.anchoredPosition = new Vector2(doneRt.anchoredPosition.x, lift);
-        shelf.rectTransform.anchoredPosition = new Vector2(0f, lift);
-        keys.anchoredPosition = new Vector2(0f, -RowH * 0.5f + 4f);   // the keycaps fill the bottom KeysH of the bubble
+        for (int i = 0; i < slots.Length; i++) ((RectTransform)slots[i].transform).anchoredPosition = new Vector2(slotX[i] + sx, lift);
+        restRt.anchoredPosition = new Vector2(restX + sx, lift);
+        var doneRt = (RectTransform)doneBtn.transform; doneRt.anchoredPosition = new Vector2(restX + sx + wide, lift);
+        ((RectTransform)loopBtn.transform).anchoredPosition = new Vector2(loopX + sx, 0f);
+        shelf.rectTransform.anchoredPosition = new Vector2(sx, lift);
+        keys.anchoredPosition = new Vector2(sx, -RowH * 0.5f + 4f);   // the keycaps fill the bottom KeysH of the bubble
     }
 
     void Open()
@@ -442,7 +467,7 @@ public class DurationPicker : MonoBehaviour
 
     int CurrentTicks()
     {
-        if (mode == Where.Draft || mode == Where.Phrase) return PathManager.I != null ? PathManager.I.BrushTicks : 24;
+        if (mode == Where.Draft || mode == Where.Phrase || (mode == Where.Inspector && node < 0)) return PathManager.I != null ? PathManager.I.BrushTicks : 24;   // (E1: the card at rest shows the brush)
         if (cube == null || node < 0 || node >= cube.nodes.Count) return 24;
         if (cube.HasDurations && node < cube.durs.Count) return cube.durs[node];
         var s = RhythmStrip.Active;
@@ -471,8 +496,9 @@ public class DurationPicker : MonoBehaviour
         }
         sat.gameObject.SetActive(selDotted);
         if (selDotted) sat.color = Color.Lerp(col, Color.white, 0.25f);
-        bool rest = mode == Where.Inspector && cube != null && cube.ModOf(node) == 1;
-        restCube.color = col; restCube.Ring = rest;
+        bool rest = mode == Where.Inspector && cube != null && node >= 0 && cube.ModOf(node) == 1;
+        if (mode == Where.Draft && cube != null && cube.nodes.Count > 0) rest = cube.ModOf(cube.nodes.Count - 1) == 1;   // Flow: the draft's last event is a rest
+        restCube.color = mode == Where.Inspector ? Color.Lerp(col, InkUI.Ink, 0.6f) : col; restCube.Ring = rest;   // (E1: on the card the hollow cube is inked as strongly as the other controls)
     }
 
     // ================================================================== picks
@@ -490,7 +516,7 @@ public class DurationPicker : MonoBehaviour
         if (cube == null) return;
         InkUI.Hop(cubes[size], 0.3f);
         int ticks = TicksFor(size, false);
-        InkUI.AuditionNote(cube, Mathf.Clamp(node, 0, cube.nodes.Count - 1), ticks / (float)ProjectConfig.TicksPerBeat, true);
+        InkUI.AuditionNote(cube, node >= 0 ? Mathf.Min(node, cube.nodes.Count - 1) : cube.nodes.Count - 1, ticks / (float)ProjectConfig.TicksPerBeat, true);   // (no note selected: the last note at that size)
     }
 
     void Pick(int size)
@@ -519,7 +545,19 @@ public class DurationPicker : MonoBehaviour
             InkUI.AuditionNote(pm.Draft, pm.Draft.nodes.Count - 1, ticks / (float)ProjectConfig.TicksPerBeat);
             Onboarding.Notify(EvLengthPicked);
         }
-        else if (mode == Where.Inspector) RhythmStrip.ApplyLength(cube, node, ticks);   // bake (legacy) + SetDuration + one History entry + audition
+        else if (mode == Where.Inspector && node >= 0)
+        {
+            RhythmStrip.ApplyLength(cube, node, ticks);   // bake (legacy) + SetDuration + one History entry + audition
+            if (PathManager.I != null) PathManager.I.SetBrush(ticks);   // E1: ... and the notes inserted after it come in the size just chosen
+        }
+        else if (mode == Where.Inspector)
+        {
+            // E1: no note selected — the size of the NEXT note (what a click on the flat grid adds); the last note plays at it
+            if (PathManager.I != null) PathManager.I.SetBrush(ticks);
+            if (cube.nodes.Count > 0) InkUI.AuditionNote(cube, cube.nodes.Count - 1, ticks / (float)ProjectConfig.TicksPerBeat);
+            Onboarding.Notify(EvLengthPicked);
+            SelectedTicks = ticks; selSize = size;
+        }
         else return;
         PickCount++;
         InkUI.Hop(cubes[size], 0.45f);
@@ -535,6 +573,7 @@ public class DurationPicker : MonoBehaviour
     {
         var cam = Camera.main;
         var isl = mode == Where.Phrase ? phraseKb : (cube != null ? cube.Island : null);
+        if (mode == Where.Draft && PathManager.FlowOn && PathManager.I != null && PathManager.I.DrawIsland != null) isl = PathManager.I.DrawIsland;   // Flow: the grid the melody's last note stands on
         if (cam == null || isl == null) { group.alpha = 0f; return; }
         float top = float.NegativeInfinity, bot = float.PositiveInfinity, minX = float.PositiveInfinity, maxX = float.NegativeInfinity;
         float h = ProjectConfig.TileSize * 0.5f;
@@ -570,6 +609,24 @@ public class DurationPicker : MonoBehaviour
         }
         if (!any || maxX < 0f || minX > Screen.width || bot > Screen.height || top < 0f) { group.alpha = 0f; group.blocksRaycasts = false; return; }
         group.alpha = 1f; group.blocksRaycasts = true;
+        // Flow: the melody walks through several grids — the row clears ALL of them (their far / near edges), its tail still on its own grid's edge
+        float ownTop = top, ownBot = bot;
+        if (mode == Where.Draft && PathManager.FlowOn && PathManager.I != null)
+        {
+            var chain = PathManager.I.DraftChain;
+            for (int g = 0; g <= chain.Count; g++)
+            {
+                var kb = g < chain.Count ? chain[g] : PathManager.I.NextNoteGrid;
+                if (kb == null || kb == isl || kb.tiles.Count > 96) continue;
+                foreach (var t in kb.tiles)
+                {
+                    if (t == null) continue;
+                    Vector3 s = cam.WorldToScreenPoint(t.Top + new Vector3(0f, 0f, t.gridZ == 0 ? -h : h));
+                    if (s.z <= 0f) continue;
+                    top = Mathf.Max(top, s.y); bot = Mathf.Min(bot, s.y);
+                }
+            }
+        }
         var root = InkUI.OverlayRoot;
         float upp = InkUI.UnitsPerPixel;
         float rowH = row.sizeDelta.y;
@@ -582,14 +639,17 @@ public class DurationPicker : MonoBehaviour
         Vector2 edge;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(root, new Vector2(cx, anchorY), null, out edge);
         Rect rr = root.rect;
-        float x = Mathf.Clamp(edge.x, rr.xMin + RowW * 0.5f + 12f, rr.xMax - RowW * 0.5f - 12f);
+        float halfW = row.sizeDelta.x * 0.5f;
+        float x = Mathf.Clamp(edge.x, rr.xMin + halfW + 12f, rr.xMax - halfW - 12f);
         float y = below ? edge.y - AboveIslandPx : edge.y + AboveIslandPx;
         y = below ? Mathf.Max(y, rr.yMin + rowH + 6f) : Mathf.Min(y, rr.yMax - rowH - 6f);   // on screen, whatever the camera does
         row.pivot = new Vector2(0.5f, below ? 1f : 0f);
         row.anchoredPosition = new Vector2(x, y);
         // the tail points at the island's edge, 4 px short of it (re-aimed only when it moved: no mesh rebuild at rest)
         Vector2 centre = new Vector2(x, below ? y - rowH * 0.5f : y + rowH * 0.5f);
-        Vector2 tip = edge - centre;
+        Vector2 own;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(root, new Vector2(cx, below ? ownBot : ownTop), null, out own);
+        Vector2 tip = own - centre;
         if (tip.sqrMagnitude > 64f) tip -= tip.normalized * 4f;
         if (float.IsNaN(lastTail.x) || (tip - lastTail).sqrMagnitude > 9f) { lastTail = tip; bubble.TailTip = tip; }
     }
@@ -608,6 +668,9 @@ public class DurationPicker : MonoBehaviour
     /// <summary>Tests: a click on the cube of <paramref name="size"/> (the selected one again = dotted on / off).</summary>
     public static void SimClick(int size) { if (I != null && size >= 0 && size < 5) I.slots[size].Click(); }
     public static void SimClickRest() { if (I != null && I.restBtn != null) I.restBtn.Click(); }
+    /// <summary>Flow: the rest cube shows on the draft row; rests it entered so far (tests).</summary>
+    public static bool RestShown => I != null && I.restBtn != null && I.restBtn.gameObject.activeInHierarchy;
+    public static int RestCount { get; private set; }
     /// <summary>Tests: a click on the draft row's done tick (finishes the draft); drafts finished by it so far.</summary>
     public static void SimClickDone() { if (I != null && I.doneBtn != null && I.doneBtn.gameObject.activeInHierarchy) I.doneBtn.Click(); }
     public static int DoneCount { get; private set; }

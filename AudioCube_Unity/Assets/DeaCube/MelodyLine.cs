@@ -149,6 +149,9 @@ public class MelodyLine : MonoBehaviour
             }
         }
         else foreach (var t in isl.tiles) if (t != null) { lo = Mathf.Min(lo, t.midi); hi = Mathf.Max(hi, t.midi); }
+        // Flow (F2): a melody walking on through its lane sounds the tiles of the later grids too (other chords: other pitches)
+        if (d.span > 0) for (int i = 0; i < d.nodes.Count; i++) { var rt = d.RealTile(i); if (rt != null) { lo = Mathf.Min(lo, rt.midi); hi = Mathf.Max(hi, rt.midi); } }
+        if (d.span > 0) foreach (var t in pm.PreviewTiles) if (t != null) { lo = Mathf.Min(lo, t.midi); hi = Mathf.Max(hi, t.midi); }
         if (lo > hi) { lo = 48; hi = 72; }
         bpb = Mathf.Max(1, GlobalClock.BeatsPerBar);
         float tpb = ProjectConfig.TicksPerBeat;
@@ -164,7 +167,7 @@ public class MelodyLine : MonoBehaviour
         unchecked
         {
             s = s * 31 + d.nodes.Count; s = s * 31 + ghostTiles.Count; s = s * 31 + pm.BrushTicks; s = s * 31 + lo; s = s * 31 + hi; s = s * 31 + beats;
-            for (int i = 0; i < d.nodes.Count; i++) { var t = d.nodes[i]; s = s * 31 + (t != null ? t.midi : -1); s = s * 31 + (i < d.durs.Count ? d.durs[i] : 0); }
+            for (int i = 0; i < d.nodes.Count; i++) { var t = d.RealTile(i); s = s * 31 + (t != null ? t.midi : -1); s = s * 31 + (i < d.durs.Count ? d.durs[i] : 0); s = s * 31 + d.ModOf(i); }
             for (int i = 0; i < ghostTiles.Count; i++) { var t = ghostTiles[i]; s = s * 31 + (t != null ? t.midi : -1); }
             s = s * 31 + d.instrument;
         }
@@ -174,10 +177,10 @@ public class MelodyLine : MonoBehaviour
         float range = Mathf.Max(1, hi - lo), x = 0f;
         for (int i = 0; i < d.nodes.Count; i++)
         {
-            var t = d.nodes[i];
+            var t = d.RealTile(i);   // Flow (F2): the tile the note sounds on (a span cube's later notes stand on the next grids)
             float len = d.DurBeats(i);
-            pts.Add(new Vector2(x / spanBeats, t != null ? (t.midi - lo) / range : 0.5f));
-            holds.Add(len / spanBeats);
+            pts.Add(new Vector2(x / spanBeats, t != null ? Mathf.Clamp01((t.midi - lo) / range) : 0.5f));
+            holds.Add(d.ModOf(i) == 1 ? -len / spanBeats : len / spanBeats);   // Flow: a rest is a gap (no hold bar, a small hollow dot)
             x += len;
         }
         for (int i = 0; i < ghostTiles.Count; i++)
@@ -355,7 +358,7 @@ public class MelodyLine : MonoBehaviour
         for (int i = 0; i < pts.Count; i++)
         {
             Vector2 c = Map(box, pts[i]);
-            g.Line(c, c + new Vector2(holds[i] * box.width, 0f), 4f, Palette.A(lineColor, 0.5f));
+            if (holds[i] > 0f) g.Line(c, c + new Vector2(holds[i] * box.width, 0f), 4f, Palette.A(lineColor, 0.5f));
         }
         if (pts.Count >= 2)
         {
@@ -372,6 +375,7 @@ public class MelodyLine : MonoBehaviour
                 int step = Mathf.FloorToInt(popT * Look.TwosFps);
                 rad *= step <= 0 ? 0.6f : (step == 1 ? 1.18f : 1f);
             }
+            if (holds[i] < 0f) { g.Disc(c, rad * 0.62f + 1.4f, rad * 0.62f + 1.4f, inkC, 16); g.Disc(c, rad * 0.62f, rad * 0.62f, InkUI.Paper, 16); continue; }   // a rest: a small hollow dot
             g.Disc(c, rad + 1.6f, rad + 1.6f, inkC, 16);
             g.Disc(c, rad, rad, i == pts.Count - 1 ? Color.Lerp(lineColor, Color.white, 0.3f) : lineColor, 16);
         }

@@ -161,7 +161,8 @@ public static class V8ChecksSphere
         yield return Click(B);
         int draftNodes = draft != null ? draft.nodes.Count : -1;
         int p0 = pushes;
-        yield return Click(B);   // the end tile again finishes
+        // Flow (2026-11-13): the end tile again is the note again now — Enter finishes (the check is about the sphere's leap, not the finish gesture)
+        KeyShim.Sim(KeyCode.Return, true, true, false); pm.RunHotkeysForTest(); KeyShim.Clear();
         yield return Frames(3);
         var ball = On(g0).FirstOrDefault(c => c.sphere);
         Line(sb, draftNodes == 2 && ball != null && ball.nodes.Count == 2 && ball.nodes[0] == A && ball.nodes[1] == B && pushes == p0 + 1,
@@ -178,7 +179,8 @@ public static class V8ChecksSphere
         pm.PickUpCube(1);
         int lx = Mathf.Min(3, cx);   // 4 one-beat notes fill the 4-beat grid exactly (a longer line would hit the capacity)
         var A1 = g0.GetTile(0, 1); var B1 = g0.GetTile(lx, 1);
-        yield return Click(A1); yield return Click(B1); yield return Click(B1);
+        yield return Click(A1); yield return Click(B1);
+        KeyShim.Sim(KeyCode.Return, true, true, false); pm.RunHotkeysForTest(); KeyShim.Clear();   // (Flow: Enter finishes)
         yield return Frames(3);
         var cube = On(g0).FirstOrDefault(c => !c.sphere && c.instrument == 1);
         Line(sb, cube != null && cube.nodes.Count == lx + 1 && !Ball(cube) && !hud.ChipsRound,

@@ -16,11 +16,19 @@ using UnityEngine.UI;
 /// world, the length row appears under the strip, the note plays); drag a block's right edge = stretch / shrink through the ten lengths (the
 /// cube grows / shrinks live, each snap auditions; one push on release); right-click = rest on / off; the tear-off ✕ on the selected block (or
 /// Backspace / Delete through CubeInspector) = delete the note (at least one stays). The first edit of a legacy cube calls BakeDurations.
+/// Flow E1 (2026-11-13): the tear-off is a TRASH CAN (✕ only closes; Backspace deletes the selected note, never the cube). A SPAN cube's strip
+/// spans its whole chain — the pattern from its home grid on through the grids its span walks on — with a hairline at each chord change and a
+/// soft band in the colour of the grid the card's flat grid shows (<see cref="ViewGrid"/>: the selected note's grid, else the part a click on
+/// the strip picked, else the playhead's, else the first: clicking a part of the strip is what switches the flat grid). The selected block's
+/// right edge is bold: the next note a click on the flat grid adds goes in there (INSERT). SPLIT (<see cref="SplitSelected"/>: the card's
+/// scissors, key S) halves the selected note into two notes on its tile; key R = rest on / off. A length that outgrows the pattern's capacity
+/// follows Flow (<see cref="MakeRoom"/>: the span grows onto the lane's next grid, or the section's last grid grows a measure) instead of the
+/// "capacity reached" chip (PathManager.Flow off: the old chip).
 /// </summary>
 public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public const float Width = 512f, Height = 110f, RulerH = 18f, BlockH = 56f, BlockBottom = -Height * 0.5f + 20f, LeftPad = 10f, RightPad = 10f;
-    public const float MaxPxPerBeat = 150f, EdgePx = 9f, PlayCubePx = 16f, TearPx = 26f;
+    public const float MaxPxPerBeat = 150f, EdgePx = 9f, PlayCubePx = 16f, TearPx = 30f;
     /// <summary>The ten lengths a note can take (ticks; 24 = one beat), shortest first: 16th, dotted 16th, 8th, … whole, dotted whole.</summary>
     public static readonly int[] Lengths = { 6, 9, 12, 18, 24, 36, 48, 72, 96, 144 };
     /// <summary>Onboarding event of a committed stretch.</summary>
@@ -58,7 +66,13 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     }
     readonly List<Block> blocks = new List<Block>(32);
     RectTransform rt, blocksRoot;
-    InkPath shade, ruler, bridges, handle, tearX;
+    InkPath shade, ruler, bridges, handle, tearX, caret;
+    // E1 (span): the windows the strip shows in pattern order (one for a cube without a span) and where each part starts (pattern beats)
+    readonly List<int> chainW = new List<int>(ProjectConfig.MaxCarry + 1);
+    readonly List<float> partStart = new List<float>(ProjectConfig.MaxCarry + 1);
+    readonly List<float> hairlines = new List<float>(ProjectConfig.MaxCarry + 1);
+    readonly List<AudioCube.TimelineEvent> evScratch = new List<AudioCube.TimelineEvent>(64);
+    int pickedPart = -1, shownPart = -1; float emptyBeat;
     InkShape tear; RectTransform tearRt;
     InkWave underline;
     Image playLine; CubeGlyph playCube;
@@ -68,6 +82,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     // gesture
     enum G { None, Select, Stretch, Rest, Tear, Empty }
     G gesture; int pressEv = -1, stretchNode = -1, startTicks, lastTicks; float stretchStart; bool stretchChanged, stretchCapped, cursorHeld;
+    RoomMark stretchRoom; int lastRaw;
     AudioCube.CubePose pose; bool poseOk;
 
     float X0 => -Width * 0.5f + LeftPad;
@@ -110,9 +125,13 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         tearRt.sizeDelta = new Vector2(TearPx, TearPx);
         tear = InkShape.Create(tearRt, "Sticker", InkShape.Kind.Sticker, InkUI.Red, new Vector2(TearPx - 4f, TearPx - 4f));
         tear.raycastTarget = false; tear.RotJitter = 6f; tear.SetInk(1.6f, 2.4f); tear.ShadowOffset = new Vector2(2f, -2f); tear.Seed = 2207;
-        tearX = InkPath.Create(tearRt, "X", new Vector2(12f, 12f));
-        InkDraw.Cross(tearX, InkUI.Paper, 2.6f);
+        tearX = InkPath.Create(tearRt, "Can", new Vector2(18f, 18f));
+        InkDraw.Trash(tearX, InkUI.Paper, InkUI.Red, 0.74f);   // E1: delete = a trash can (the cross only closes)
         tearRt.gameObject.SetActive(false);
+        // E1: the selected block's bold right edge — where the next inserted note goes
+        caret = InkPath.Create(transform, "InsertEdge", new Vector2(8f, BlockH));
+        caret.UnitPx = 1f; caret.Wobble = 0.3f;
+        caret.gameObject.SetActive(false);
     }
 
     InkPath Layer(string name)
@@ -127,7 +146,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
         if (c == Cube && c != null) return;
         EndGesture();
-        Cube = c; SelectedNote = -1; selEv = -1; sig = int.MinValue; hoverEv = -1; hoverEdge = -1;
+        Cube = c; SelectedNote = -1; selEv = -1; sig = int.MinValue; hoverEv = -1; hoverEdge = -1; pickedPart = -1; window = -1;
         if (c == null) { HideAll(); return; }
         Rebuild();
     }
@@ -147,10 +166,75 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     // ================================================================== building the view
     int PickWindow(AudioCube c)
     {
-        if (poseOk && pose.active && pose.window >= 0) return pose.window;
-        if (window >= 0 && window < c.windows.Count) return window;
-        return c.windows.Count > 0 ? 0 : -1;
+        if (poseOk && pose.active && pose.window >= 0) return BaseOf(c, pose.window);
+        if (window >= 0 && window < c.windows.Count) return BaseOf(c, window);
+        return c.windows.Count > 0 ? BaseOf(c, 0) : -1;
     }
+
+    static bool GoesOn(AudioCube.Window a, AudioCube.Window b) => Mathf.Abs(a.start + a.length - b.start) < 1e-3f && Mathf.Abs(a.offset + a.length - b.offset) < 1e-3f;
+
+    /// <summary>E1 (span): the window the pattern of the run through window <paramref name="w"/> STARTS in — w itself unless it is a through
+    /// window with an offset (a later grid of a span cube's chain: then the window the melody came from, back to its home window).</summary>
+    static int BaseOf(AudioCube c, int w)
+    {
+        for (int g = 0; g <= ProjectConfig.MaxCarry && w >= 0 && w < c.windows.Count && c.windows[w].through && c.windows[w].offset > 1e-4f; g++)
+        {
+            int prev = -1;
+            for (int a = 0; a < c.windows.Count && prev < 0; a++) if (a != w && GoesOn(c.windows[a], c.windows[w])) prev = a;
+            if (prev < 0) break;
+            w = prev;
+        }
+        return w;
+    }
+
+    /// <summary>E1 (span): the parts the strip shows — the picked window, then the through windows the melody walks straight on into (their
+    /// summed lengths = the strip's time; one part for a cube without a span).</summary>
+    void BuildChain(AudioCube c)
+    {
+        chainW.Clear(); partStart.Clear();
+        if (window < 0 || window >= c.windows.Count) { winLen = Mathf.Max(1f, c.measureLength); return; }
+        chainW.Add(window); partStart.Add(0f);
+        winLen = c.windows[window].length;
+        if (!c.HasThrough) return;
+        for (int g = 0, cur = window; g < ProjectConfig.MaxCarry; g++)
+        {
+            int next = -1;
+            for (int b = 0; b < c.windows.Count && next < 0; b++) if (b != cur && c.windows[b].through && c.windows[b].offset > 1e-4f && GoesOn(c.windows[cur], c.windows[b])) next = b;
+            if (next < 0) break;
+            chainW.Add(next); partStart.Add(c.windows[next].offset);
+            winLen += c.windows[next].length;
+            cur = next;
+        }
+    }
+
+    /// <summary>E1 (span): the parts of the strip (the grids of the cube's chain it shows; 1 without a span), where part <paramref name="p"/>
+    /// starts (pattern beats), the strip's whole time, the grid of a part and the beats that carry a hairline (each chord change).</summary>
+    public int Parts => Mathf.Max(1, chainW.Count);
+    public float PartStart(int p) => p >= 0 && p < partStart.Count ? partStart[p] : 0f;
+    public float TotalBeats => winLen;
+    public KeyBlock PartGrid(int p) => Cube != null && p >= 0 && p < chainW.Count && chainW[p] < Cube.windows.Count ? Cube.windows[chainW[p]].island : (Cube != null ? Cube.Island : null);
+    public IReadOnlyList<float> Hairlines => hairlines;
+    int PartOfBeat(float beat) { int p = 0; for (int i = 1; i < partStart.Count; i++) if (beat >= partStart[i] - 1e-3f) p = i; return p; }
+
+    /// <summary>E1: the part of the strip the card's flat grid shows: the selected note's, else the part a click on the strip picked, else the
+    /// playhead's, else the first (always 0 without a span).</summary>
+    public int ViewPart
+    {
+        get
+        {
+            if (Cube == null || chainW.Count <= 1) return 0;
+            if (SelectedNote >= 0 && SelectedNote < Cube.nodes.Count) return PartOfBeat(Cube.NodeStartBeat(SelectedNote));   // (where the note lives — also when a faded repeat of it was clicked)
+            if (pickedPart >= 0 && pickedPart < chainW.Count) return pickedPart;
+            if (poseOk && pose.active) { int ci = chainW.IndexOf(pose.window); if (ci >= 0) return ci; }
+            return 0;
+        }
+    }
+    /// <summary>E1: the grid of the cube's chain the card's flat grid shows (null without a span: the cube's own grid).</summary>
+    public KeyBlock ViewGrid => Cube != null && chainW.Count > 1 ? PartGrid(ViewPart) : null;
+    /// <summary>E1: the flat grid stays on part <paramref name="p"/> of the chain (a click on that part's empty time; the grid of a note just added).</summary>
+    public void PickPart(int p) { pickedPart = chainW.Count > 1 ? Mathf.Clamp(p, 0, chainW.Count - 1) : -1; }
+    /// <summary>E1: <see cref="PickPart"/> for the part node <paramref name="node"/> starts in.</summary>
+    public void PickPartOfNode(int node) { if (Cube != null && node >= 0 && node < Cube.nodes.Count) PickPart(PartOfBeat(Cube.NodeStartBeat(node))); }
 
     int Sig(AudioCube c)
     {
@@ -172,6 +256,8 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
             int w = PickWindow(c);
             h = h * 31 + w; h = h * 31 + c.windows.Count;
             if (w >= 0 && w < c.windows.Count) h = h * 31 + c.windows[w].length.GetHashCode();
+            h = h * 31 + c.span;   // E1: the chain the strip spans
+            if (c.HasThrough) for (int i = 0; i < c.windows.Count && i < 24; i++) h = h * 31 + c.windows[i].length.GetHashCode() + (c.windows[i].through ? 7 : 0);
             h = h * 31 + GlobalClock.Swing.GetHashCode(); h = h * 31 + GlobalClock.BeatsPerBar;
             var isl = c.Island; h = h * 31 + (isl != null ? isl.GetInstanceID() : 0);
             return h;
@@ -185,8 +271,15 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         if (c == null || c.nodes.Count == 0) { HideAll(); return; }
         sig = Sig(c);
         window = PickWindow(c);
-        winLen = window >= 0 && window < c.windows.Count ? c.windows[window].length : Mathf.Max(1f, c.measureLength);
-        c.TimelineEvents(window, events);
+        BuildChain(c);   // (winLen = the summed lengths of the parts)
+        if (chainW.Count <= 1) c.TimelineEvents(window, events);
+        else for (int p = 0; p < chainW.Count; p++)
+        {
+            // a span cube: every part's notes, on the pattern's own time (a note ringing over a seam is one long block)
+            c.TimelineEvents(chainW[p], evScratch);
+            for (int i = 0; i < evScratch.Count; i++) { var e = evScratch[i]; e.start += partStart[p]; events.Add(e); }
+        }
+        if (pickedPart >= chainW.Count) pickedPart = -1;
         int n = c.nodes.Count;
         period = c.mode == PathMode.PingPong ? Mathf.Max(1, 2 * n - 2) : n;
         float lastEnd = 0f;
@@ -194,7 +287,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         cycleBeats = events.Count > period ? events[period].start : Mathf.Min(winLen, Mathf.Max(0.25f, lastEnd));
         // zoom: one pass fills most of the width (≤ MaxPxPerBeat), the whole window when the pass nearly fills it
         float usable = Width - LeftPad - RightPad;
-        float wantBeats = cycleBeats >= winLen * 0.8f ? winLen : Mathf.Min(winLen, cycleBeats * 1.3f);
+        float wantBeats = chainW.Count > 1 || cycleBeats >= winLen * 0.8f ? winLen : Mathf.Min(winLen, cycleBeats * 1.3f);   // (a span cube: its whole chain, so every part can be clicked)
         ppb = Mathf.Min(MaxPxPerBeat, usable / Mathf.Max(0.25f, wantBeats));
         visBeats = usable / ppb;
         if (visBeats > winLen) { visBeats = winLen; ppb = usable / winLen; }
@@ -223,6 +316,12 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
             b.rt.sizeDelta = new Vector2(w, hgt);
             b.rt.localScale = Vector3.one; b.bounceT = 9f;
             var tile = e.node >= 0 && e.node < c.nodes.Count ? c.nodes[e.node] : null;
+            if (tile != null && chainW.Count > 1)
+            {
+                // a span cube: the block wears the colour of the tile the note sounds on — its cell on the grid of the part it starts in
+                var rt2 = c.RealTile(e.node); var kb = PartGrid(PartOfBeat(e.start));
+                if (rt2 != null && kb != null && kb.cols > 0 && kb.rows > 0) tile = kb == rt2.island ? rt2 : (kb.GetTile(Mathf.Clamp(rt2.gridX, 0, kb.cols - 1), Mathf.Clamp(rt2.gridZ, 0, kb.rows - 1)) ?? rt2);
+            }
             Color fill = tile != null ? PathGridView.TileColor(tile, lo, hi, moonIsl) : new Color(0.8f, 0.78f, 0.9f);
             if (e.mod == 2) fill = Color.Lerp(fill, Color.white, 0.45f);
             float a = faded ? 0.38f : 1f;
@@ -293,13 +392,34 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         int bpb = Mathf.Max(1, GlobalClock.BeatsPerBar);
         float top = Height * 0.5f, yRuler = top - RulerH;
         float x0 = X0, xEnd = XVisEnd;
-        // faint shading on alternate bars
-        for (int bar = 1; bar * bpb < visBeats + 1e-3f; bar += 2)
+        hairlines.Clear(); shownPart = -1;
+        if (chainW.Count > 1)
         {
-            float a = x0 + bar * bpb * ppb, b = Mathf.Min(xEnd, x0 + (bar + 1) * bpb * ppb);
-            if (b <= a) continue;
-            shade.Begin().P(a, BlockBottom - 6f).P(b, BlockBottom - 6f).P(b, top - 2f).P(a, top - 2f).EndFill(Palette.A(InkUI.Ink, 0.055f));
+            // a span cube: a soft band in the colour of the grid the flat grid shows, a hairline at each chord change
+            int vp = ViewPart; shownPart = vp;
+            float a = x0 + partStart[vp] * ppb, b = Mathf.Min(xEnd, x0 + (vp + 1 < partStart.Count ? partStart[vp + 1] : winLen) * ppb);
+            var kb = PartGrid(vp);
+            Color gc = kb != null ? Comic.Opaque(kb.chordColor) : InkUI.Ink;
+            if (b > a) shade.Begin().P(a, BlockBottom - 6f).P(b, BlockBottom - 6f).P(b, top - 2f).P(a, top - 2f).EndFill(Palette.A(gc, 0.3f));
+            for (int p = 1; p < partStart.Count; p++)
+            {
+                float x = x0 + partStart[p] * ppb;
+                if (x > xEnd + 0.5f) break;
+                ruler.Line(Palette.A(InkUI.Ink, 0.8f), 1.3f, new Vector2(x, BlockBottom - 6f), new Vector2(x, top - 2f));
+                hairlines.Add(partStart[p]);
+            }
         }
+        else
+        {
+            // faint shading on alternate bars
+            for (int bar = 1; bar * bpb < visBeats + 1e-3f; bar += 2)
+            {
+                float a = x0 + bar * bpb * ppb, b = Mathf.Min(xEnd, x0 + (bar + 1) * bpb * ppb);
+                if (b <= a) continue;
+                shade.Begin().P(a, BlockBottom - 6f).P(b, BlockBottom - 6f).P(b, top - 2f).P(a, top - 2f).EndFill(Palette.A(InkUI.Ink, 0.055f));
+            }
+        }
+        // the ruler line, beat ticks, taller bar ticks (E1: no cube mark on them — one thing less to decode)
         // the ruler line, beat ticks, bar ticks with a tiny cube mark
         ruler.Line(Palette.A(InkUI.Ink, 0.7f), 1.8f, new Vector2(x0, yRuler), new Vector2(xEnd, yRuler));
         float step = ppb < 14f ? bpb : 1f;   // very long windows: bar ticks only
@@ -307,11 +427,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         {
             float x = x0 + bt * ppb;
             bool bar = Mathf.Abs(bt / bpb - Mathf.Round(bt / bpb)) < 1e-3f;
-            if (bar)
-            {
-                ruler.Line(InkUI.Ink, 2.2f, new Vector2(x, yRuler - 2f), new Vector2(x, yRuler + 11f));
-                ruler.Begin().P(x, yRuler + 16f).P(x + 3.2f, yRuler + 13.8f).P(x, yRuler + 11.6f).P(x - 3.2f, yRuler + 13.8f).EndPoly(InkUI.Paper, InkUI.Ink, 1.4f);
-            }
+            if (bar) ruler.Line(InkUI.Ink, 2.2f, new Vector2(x, yRuler - 2f), new Vector2(x, yRuler + 11f));
             else ruler.Line(Palette.A(InkUI.Ink, 0.6f), 1.6f, new Vector2(x, yRuler), new Vector2(x, yRuler + 6f));
         }
         // the window's end (the island ends here) when it is in view
@@ -351,6 +467,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         foreach (var b in blocks) if (b.rt.gameObject.activeSelf) b.rt.gameObject.SetActive(false);
         if (shade != null) { shade.Clear(); ruler.Clear(); bridges.Clear(); }
         if (underline != null) underline.gameObject.SetActive(false);
+        if (caret != null) caret.gameObject.SetActive(false);
         if (tearRt != null) tearRt.gameObject.SetActive(false);
         if (handle != null) handle.gameObject.SetActive(false);
     }
@@ -363,6 +480,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         if (c.nodes.Count == 0) { if (nBlocks > 0) HideAll(); return; }
         poseOk = c.TryGetPose(out pose);
         if (Sig(c) != sig) Rebuild();
+        else if (chainW.Count > 1 && ViewPart != shownPart) DrawRuler();   // the band follows the part the flat grid shows
         float dt = Time.unscaledDeltaTime;
         UpdateHover();
         UpdatePlayhead();
@@ -376,7 +494,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         int edge = -1, blk = -1;
         if (over) { Local(Input.mousePosition, out lp); edge = EdgeAt(lp); blk = edge >= 0 ? edge : BlockUnder(lp); }
         hoverEv = blk; hoverEdge = edge;
-        int h = gesture == G.Stretch ? pressEv : (edge >= 0 ? edge : (selEv >= 0 && selEv < nBlocks ? selEv : -1));
+        int h = gesture == G.Stretch ? pressEv : edge;   // (E1: the selected block's edge is the bold insert edge; the grip shows on a hovered edge)
         bool showHandle = h >= 0 && h < nBlocks && !events[h].rest;
         if (handle.gameObject.activeSelf != showHandle) handle.gameObject.SetActive(showHandle);
         if (showHandle)
@@ -395,7 +513,8 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
         var c = Cube;
         float local = -1f;
-        if (poseOk && pose.active && pose.window == window && window >= 0 && window < c.windows.Count) local = GlobalClock.SongBeat - c.windows[window].start;
+        if (poseOk && pose.active && pose.window >= 0 && pose.window < c.windows.Count && chainW.IndexOf(pose.window) >= 0)
+            local = GlobalClock.SongBeat - c.windows[pose.window].start + c.WindowOffset(pose.window);   // (a span cube: the pattern's own beat on a later part)
         bool playing = local >= 0f && nBlocks > 0;
         float shown = playing ? local : 0f;
         if (playing && shown > visBeats - 1e-3f && cycleBeats > 0.01f) shown = Mathf.Repeat(local, cycleBeats);
@@ -427,7 +546,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
     void HandleLanded(AudioCube c, int w, int k, AudioCube.Hit hit)
     {
-        if (c == null || c != Cube || w != window || !hit.hit) return;
+        if (c == null || c != Cube || chainW.IndexOf(w) < 0 || !hit.hit) return;
         for (int i = 0; i < nBlocks; i++)
             if (events[i].k == k) { blocks[i].bounceT = 0f; BounceCount++; break; }
     }
@@ -502,6 +621,10 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     public bool PlayLineShown => playLine != null && playLine.gameObject.activeSelf;
     public Vector2 TearPos => tearRt != null ? tearRt.anchoredPosition : Vector2.zero;
     public bool TearShown => tearRt != null && tearRt.gameObject.activeSelf;
+    /// <summary>E1 (tests): what the tear-off draws ("trash"), and whether the selected block wears its bold insert edge (and its strip-local x).</summary>
+    public string TearGlyph => tearX != null ? tearX.Glyph : null;
+    public bool InsertEdgeShown => caret != null && caret.gameObject.activeSelf;
+    public float InsertEdgeX => caret != null ? caret.rectTransform.anchoredPosition.x : 0f;
 
     // ================================================================== gestures
     public void OnPointerDown(PointerEventData e)
@@ -532,12 +655,13 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
             gesture = G.Stretch; pressEv = edge;
             var e = events[edge];
             stretchNode = e.node; stretchStart = e.start; stretchChanged = false; stretchCapped = false;
-            startTicks = TicksOf(edge); lastTicks = startTicks;
+            stretchRoom = MarkRoom(Cube);
+            startTicks = TicksOf(edge); lastTicks = startTicks; lastRaw = startTicks;
             return;
         }
         int b = BlockUnder(lp);
         if (b >= 0) { gesture = G.Select; pressEv = b; return; }
-        gesture = G.Empty;
+        gesture = G.Empty; emptyBeat = (lp.x - X0) / Mathf.Max(1e-3f, ppb);
     }
 
     void Drag(Vector2 lp)
@@ -545,11 +669,15 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         if (gesture != G.Stretch || Cube == null || stretchNode < 0 || stretchNode >= Cube.nodes.Count) return;
         float endBeat = (lp.x - X0) / Mathf.Max(1e-3f, ppb);
         int ticks = Snap((endBeat - stretchStart) * ProjectConfig.TicksPerBeat);
-        if (ticks > startTicks)   // v7 §19.1: a stretch stops at the grid's capacity (the longest length that fits; one refusal per gesture)
+        if (ticks == lastRaw) return;
+        lastRaw = ticks;
+        ResetRoom(Cube, stretchRoom);   // E1 / Flow: the room an earlier step of this drag made goes back before this step asks again
+        if (ticks > startTicks)   // v7 §19.1: a stretch stops at the pattern's capacity (the longest length that fits; one refusal per gesture)
         {
             int max = MaxTicksFor(Cube, stretchNode);
-            if (ticks > max)
+            if (ticks > max && !GrowFor(Cube, stretchNode, ticks))   // E1 / Flow: first the melody makes room by itself (span + 1 / the grid grows)
             {
+                max = MaxTicksFor(Cube, stretchNode);
                 int fit = startTicks;
                 foreach (int L in Lengths) if (L > fit && L <= max) fit = L;
                 ticks = fit;
@@ -578,7 +706,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
                 if (stretchChanged) CommitStretch();
                 else if (EdgeAt(lp) == pressEv || BlockUnder(lp) == pressEv) SelectEvent(pressEv, true);
                 break;
-            case G.Empty: Deselect(); break;
+            case G.Empty: Deselect(); if (chainW.Count > 1) PickPart(PartOfBeat(emptyBeat)); break;   // E1: an empty part of a span cube's strip = show that grid
         }
         pressEv = -1;
     }
@@ -628,6 +756,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         if (Cube == null || i < 0 || i >= nBlocks) { Deselect(); return; }
         selEv = i;
         SelectedNote = events[i].node;
+        if (chainW.Count > 1) pickedPart = PartOfBeat(Cube.NodeStartBeat(SelectedNote));   // (deselected later, the flat grid stays on this note's grid)
         PlaceSelection();
         if (audition && !events[i].rest) InkUI.AuditionNote(Cube, SelectedNote, events[i].len);
         else if (audition) AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 0.8f);
@@ -657,8 +786,12 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         bool on = selEv >= 0 && selEv < nBlocks && SelectedNote >= 0;
         if (underline.gameObject.activeSelf != on) underline.gameObject.SetActive(on);
         if (tearRt.gameObject.activeSelf != on) tearRt.gameObject.SetActive(on);
+        if (caret.gameObject.activeSelf != on) caret.gameObject.SetActive(on);
         if (!on) return;
         var b = blocks[selEv];
+        // E1: the bold right edge — a note added on the flat grid goes in right after this one
+        caret.rectTransform.anchoredPosition = new Vector2(b.x1, BlockBottom + b.h * 0.5f);
+        caret.Clear().Line(InkUI.Ink, 4.6f, new Vector2(0f, -b.h * 0.5f + 4f), new Vector2(0f, b.h * 0.5f - 4f));
         float w = Mathf.Max(14f, b.x1 - b.x0);
         InkUI.Centre(underline.rectTransform, new Vector2((b.x0 + b.x1) * 0.5f, BlockBottom - 9f), new Vector2(w, 8f));
         tearRt.anchoredPosition = new Vector2(Mathf.Min(b.x1 - 2f, Width * 0.5f - TearPx * 0.5f), Mathf.Min(BlockBottom + b.h + 2f, Height * 0.5f - RulerH - 2f));
@@ -690,6 +823,59 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
         Rebuild();
         SelectNode(next);
         if (SelectedNote < 0) SetSelection(-1, true);
+    }
+
+    /// <summary>E1 SPLIT (the card's scissors, key S): the selected note becomes two notes of half its length on the same tile (its sticker and
+    /// its nudge on both; the first half stays selected); one History entry. Refused with a soft tick when a half would be shorter than the
+    /// shortest size (a 16th, a dotted 16th) or is not one of the ten lengths.</summary>
+    public bool SplitSelected()
+    {
+        var c = Cube; int node = SelectedNote;
+        if (c == null || node < 0 || node >= c.nodes.Count) return false;
+        int t = c.HasDurations && node < c.durs.Count ? c.durs[node] : Snap(c.StepBeats * ProjectConfig.TicksPerBeat);
+        if (t % 2 != 0 || Array.IndexOf(Lengths, t / 2) < 0) { SoftTick(); return false; }
+        EnsureDurations(c);
+        t = c.durs[node];
+        if (t % 2 != 0 || Array.IndexOf(Lengths, t / 2) < 0) { SoftTick(); return false; }
+        int n = c.nodes.Count, half = t / 2;
+        var tiles = c.PathTiles(); var mods = new List<int>(n + 1); var durs = new List<int>(n + 1); var bend = new List<int>(n + 1); var nudge = new List<int>(n + 1);
+        for (int i = 0; i < n; i++) { mods.Add(c.ModOf(i)); durs.Add(c.durs[i]); bend.Add(c.BendAt(i)); nudge.Add(c.NudgeAt(i)); }
+        tiles.Insert(node + 1, tiles[node]); mods.Insert(node + 1, mods[node]); bend.Insert(node + 1, bend[node]); nudge.Insert(node + 1, nudge[node]);
+        durs[node] = half; durs.Insert(node + 1, half);
+        c.SetPathAndMods(tiles, mods, durs, bend, nudge);
+        History.Push();
+        EditCount++; SplitCount++;
+        CubeInspector.NoteRhythmEdited();
+        AudioPool.UI(ProceduralAudio.Tick(), 0.32f, 1.35f);
+        SelectAfterEdit(node);
+        if (c.ModOf(node) != 1) InkUI.AuditionNote(c, node, half / (float)ProjectConfig.TicksPerBeat);
+        return true;
+    }
+    /// <summary>Notes split so far (tests).</summary>
+    public int SplitCount { get; private set; }
+
+    /// <summary>E1 (key R): rest on / off for the selected note (one History entry); false when none is selected.</summary>
+    public bool ToggleRestSelected()
+    {
+        if (Cube == null || SelectedNote < 0 || SelectedNote >= Cube.nodes.Count) return false;
+        ToggleRestAt(SelectedNote);
+        return true;
+    }
+
+    /// <summary>E1: after an edit that changed the notes (an insert on the flat grid, a split): the strip redraws at once and selects node
+    /// <paramref name="node"/> (no audition: the edit already played it).</summary>
+    public void SelectAfterEdit(int node)
+    {
+        if (Cube == null) return;
+        sig = int.MinValue;
+        Rebuild();
+        SelectNode(node);
+    }
+
+    void SoftTick()
+    {
+        AudioPool.UI(ProceduralAudio.Tick(), 0.3f, 0.8f);
+        if (selEv >= 0 && selEv < nBlocks) blocks[selEv].bounceT = 0f;
     }
 
     /// <summary>Tests: a stretch of block <paramref name="i"/> to <paramref name="ticks"/> through the drag path (one History entry).</summary>
@@ -730,7 +916,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
         if (c == null || node < 0 || node >= c.nodes.Count) return;
         EnsureDurations(c);
-        if (node < c.durs.Count && ticks > c.durs[node] && ticks > MaxTicksFor(c, node)) { CapacityRefused(c); return; }   // v7 §19.1: finished paths keep the cap
+        if (node < c.durs.Count && ticks > c.durs[node] && ticks > MaxTicksFor(c, node) && !GrowFor(c, node, ticks)) { CapacityRefused(c); return; }   // v7 §19.1: finished paths keep the cap (E1 / Flow: after the melody made what room it can)
         c.SetDuration(node, ticks);
         History.Push();
         CubeInspector.NoteRhythmEdited();
@@ -745,7 +931,7 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     public static int MaxTicksFor(AudioCube c, int node)
     {
         if (c == null || PathManager.AutoHand || !c.HasDurations || node < 0 || node >= c.durs.Count) return int.MaxValue;
-        float cap = PathManager.CapacityOf(c.Island);
+        float cap = PathManager.CapacityOf(c.Island, c.span);   // (a span cube: its whole chain)
         if (cap <= 0f) return int.MaxValue;
         int others = 0;
         for (int i = 0; i < c.durs.Count; i++) if (i != node) others += c.durs[i];
@@ -755,17 +941,113 @@ public class RhythmStrip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     /// <summary>Lengths refused at the grid's capacity (tests).</summary>
     public static int CapacityRefusals { get; private set; }
 
-    /// <summary>A length past the grid's capacity: a thud, the grid shakes, the one-time "capacity reached" tip and the grid view's EXPAND chip.</summary>
-    static void CapacityRefused(AudioCube c)
+    /// <summary>A length past the grid's capacity: a thud, the grid shakes, the one-time "capacity reached" tip and the grid view's EXPAND chip.
+    /// Flow: only the thud and the shake (no words, no chip — the melody already took all the room its section has).</summary>
+    public static void CapacityRefused(AudioCube c)
     {
         CapacityRefusals++;
         AudioPool.UI(ProceduralAudio.Thud(), 0.3f, 1.4f);
         var kb = c != null ? c.Island : null;
         if (kb != null) kb.Shake(0.12f);
+        if (PathManager.FlowOn) return;
         Onboarding.Notify(Onboarding.Ev.CapacityReached);
         var g = InspectorCard.Grid;
         if (g != null) g.ShowCapacityChip();
     }
+
+    // ------------------------------------------------------------------ E1 / Flow (SPEC flow §3): an edit that outgrows the pattern's capacity makes room
+    /// <summary>Spans the card raised / measures it grew to make room (tests).</summary>
+    public static int RoomSpans { get; private set; }
+    public static int RoomGrows { get; private set; }
+
+    /// <summary>
+    /// Makes room for finished cube <paramref name="c"/>'s pattern to be <paramref name="totalTicks"/> long. Fits already → true. Else, with
+    /// PathManager.Flow: R1 while a next column exists in the section and span &lt; MaxCarry, the cube's span grows onto the next grid of its
+    /// lane (an EXISTING one: the card never builds grids — a lane without one there refuses); R2 at the section's last column with room, that
+    /// column grows a measure (live, as while drawing). No History here (the gesture's owner pushes once). False = it cannot fit: the caller
+    /// refuses (Flow off / AutoHand: nothing ever grows — the v7 cap and its chip).
+    /// </summary>
+    public static bool MakeRoom(AudioCube c, int totalTicks)
+    {
+        if (c == null || !c.HasDurations) return true;
+        var sm = SongManager.I; var home = c.Island;
+        if (sm == null || home == null) return true;
+        for (int guard = 0; guard < 8; guard++)
+        {
+            float cap = PathManager.CapacityOf(home, c.span);
+            if (cap <= 0f) return true;   // a Moon, stairs: no cap
+            if (totalTicks <= Mathf.RoundToInt(cap * ProjectConfig.TicksPerBeat)) return true;
+            if (!PathManager.FlowOn || home.IsPhrase || c.IsOnMoon) return false;
+            var chain = sm.SpanChain(home, c.span);
+            if (chain.Count < c.span + 1) return false;   // (the lane ends before the span does: nothing more to reach)
+            var last = chain[chain.Count - 1];
+            int col = last.column;
+            bool nextIn = col + 1 < sm.ColumnCount && !sm.SectionBoundaryAfter(col);
+            if (nextIn && c.span < ProjectConfig.MaxCarry)
+            {
+                if (sm.LaneNext(last) == null) return false;
+                c.SetSpan(c.span + 1); RoomSpans++;
+                continue;
+            }
+            int bars = sm.ColumnBars(col);
+            if (!nextIn && bars + 1 <= 4 && sm.SectionBarsIfResized(col, bars + 1) <= ProjectConfig.SectionBars && sm.ResizeColumnLive(col, bars + 1)) { RoomGrows++; continue; }
+            return false;
+        }
+        return false;
+    }
+
+    /// <summary><see cref="MakeRoom"/> for node <paramref name="node"/> of <paramref name="c"/> lasting <paramref name="ticks"/> (the others as they are).</summary>
+    static bool GrowFor(AudioCube c, int node, int ticks)
+    {
+        if (c == null || !c.HasDurations) return false;
+        int total = ticks;
+        for (int i = 0; i < c.durs.Count; i++) if (i != node) total += c.durs[i];
+        return MakeRoom(c, total);
+    }
+
+    /// <summary>The room a cube had when a drag began (its span, the measures of its chain's last column): a drag that made room and then came
+    /// back gives it back (<see cref="ResetRoom"/>) — the song is never left longer than the gesture's end needs.</summary>
+    struct RoomMark { public int span, col, bars; }
+    static RoomMark MarkRoom(AudioCube c)
+    {
+        var m = new RoomMark { span = c != null ? c.span : 0, col = -1, bars = 0 };
+        var sm = SongManager.I; var home = c != null ? c.Island : null;
+        if (sm == null || home == null) return m;
+        var chain = sm.SpanChain(home, m.span);
+        var last = chain.Count > 0 ? chain[chain.Count - 1] : home;
+        m.col = last.column; m.bars = sm.ColumnBars(m.col);
+        return m;
+    }
+    static void ResetRoom(AudioCube c, RoomMark m)
+    {
+        var sm = SongManager.I;
+        if (c == null || sm == null) return;
+        if (c.span > m.span) c.SetSpan(m.span);
+        if (m.col >= 0 && m.col < sm.ColumnCount && sm.ColumnBars(m.col) > m.bars) sm.ResizeColumnLive(m.col, m.bars);
+    }
+
+    /// <summary>E1: a REST of <paramref name="ticks"/> at the pattern's end (the cube waits on its last tile) — the size row's rest cube with no
+    /// note selected. A legacy cube is baked first; the pattern makes room (<see cref="MakeRoom"/>) or the rest is refused; one History entry.</summary>
+    public static bool AppendRest(AudioCube c, int ticks)
+    {
+        if (c == null || c.nodes.Count == 0) return false;
+        EnsureDurations(c);
+        if (!c.HasDurations) return false;
+        ticks = AudioCube.ClampTicks(ticks);
+        int total = ticks;
+        for (int i = 0; i < c.durs.Count; i++) total += c.durs[i];
+        if (!MakeRoom(c, total)) { CapacityRefused(c); return false; }
+        var tiles = c.PathTiles();
+        c.InsertNode(c.nodes.Count, tiles[tiles.Count - 1], 1, ticks);
+        History.Push();
+        CubeInspector.NoteRhythmEdited();
+        AudioPool.UI(ProceduralAudio.Tick(), 0.35f, 0.75f);
+        if (Active != null && Active.Cube == c) { Active.EditCount++; Active.sig = int.MinValue; Active.PickPartOfNode(c.nodes.Count - 1); }
+        return true;
+    }
+
+    /// <summary>The first rhythm edit of a legacy cube made elsewhere on the card (an insert on the flat grid): its bake, counted here.</summary>
+    public static void BakeFor(AudioCube c) { EnsureDurations(c); }
 
     /// <summary>Rest on / off for node <paramref name="node"/> (a legacy cube is baked first); one History entry.</summary>
     public static void ApplyRest(AudioCube c, int node)

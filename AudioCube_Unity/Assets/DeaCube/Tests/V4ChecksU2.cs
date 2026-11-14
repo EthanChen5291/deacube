@@ -231,15 +231,15 @@ public static class V4ChecksU2
             Line(hints, "hint ids: inspector (+ .grid .volume .close .swatches → the chip, .rhythm → the strip) and draft.lengths");
             // what a real click reaches: the top raycast target at each face control's centre is that control
             {
-                var targets = new List<Transform> { InspectorCard.ChipButton.transform, Hints.RectOf("inspector.volume"), InspectorCard.PencilButton.transform, InspectorCard.ReverseButton.transform,
-                    InspectorCard.ModeButton(0).transform, InspectorCard.ModeButton(1).transform, InspectorCard.ModeButton(2).transform, InspectorCard.CloseButton.transform,
-                    InspectorCard.DeleteButton.transform, InspectorCard.MoreTab.transform };
+                // Flow E1 (2026-11-13): the face is the chip, the volume line, the size row, close, the trash can and ONE more — pencil, reverse and the
+                // path modes are icons of the ⋯ drawer now (a real click reaches them there: FlowChecksCard b)
+                var targets = new List<Transform> { InspectorCard.ChipButton.transform, Hints.RectOf("inspector.volume"), DurationPicker.Slot(0).transform, DurationPicker.Slot(4).transform,
+                    InspectorCard.CloseButton.transform, InspectorCard.DeleteButton.transform, InspectorCard.MoreTab.transform };
                 string miss = null; int ok = 0;
                 foreach (var t in targets)
                 {
                     string got;
                     Vector2 pt = CentreOf((RectTransform)t);
-                    if (t == InspectorCard.MoreTab.transform) pt += new Vector2(8f, 0f);   // the tongue's part outside the card
                     if (TopHit(t, pt, out got)) ok++; else if (miss == null) miss = t.name + " -> " + got;
                 }
                 string g1, s1;
@@ -330,10 +330,10 @@ public static class V4ChecksU2
             Key(KeyCode.Escape); yield return null;
             bool d2 = !InspectorCard.DrawerOpen && CubeInspector.State == CubeInspector.Phase.Open;
             Key(KeyCode.Escape); yield return null;
-            bool d3 = strip.SelectedNote < 0 && CubeInspector.State == CubeInspector.Phase.Open && !DurationPicker.IsShown;
+            bool d3 = strip.SelectedNote < 0 && CubeInspector.State == CubeInspector.Phase.Open && DurationPicker.IsShown && DurationPicker.TargetNode < 0;   // Flow E1: the size row stays on the card (back to the next note's size)
             Key(KeyCode.Escape); yield return null;
             bool d4 = CubeInspector.State == CubeInspector.Phase.Closing;
-            Line(d1 && d2 && d3 && d4, "Esc closes the drawer, then deselects the note (the length row goes), then sends the cube back", d1 + " " + d2 + " " + d3 + " " + d4);
+            Line(d1 && d2 && d3 && d4, "Esc closes the drawer, then deselects the note (Flow E1: the size row goes back to the next note's size), then sends the cube back", d1 + " " + d2 + " " + d3 + " " + d4);
             yield return WaitFor(() => CubeInspector.State == CubeInspector.Phase.Closed, 3f);
         }
 
@@ -348,9 +348,10 @@ public static class V4ChecksU2
             yield return WaitFor(() => InspectorCard.DrawerShown >= 1f, 1.5f); yield return Wait(0.25f);
             var dial = InspectorCard.Dial;
             // v7 §21 ("just keep cubes on each grid"): the rider card is retired — a cube never leaves its grid
-            Line(InspectorCard.DrawerOpen && InspectorCard.DrawerShown >= 1f && dial != null && dial.gameObject.activeInHierarchy && InspectorCard.DrawerButton("pace2").gameObject.activeInHierarchy
-                 && InspectorCard.DrawerButton("rider") == null,
-                 "the more tab pulls the drawer out: twin, shadow, echo, stamp, gate, octave (§21: no rider card); the necklace and the pace row for a legacy cube");
+            // Flow E1 (2026-11-13): the legacy necklace and the pace row left the UI ("BE SIMPLE AND MINIMALISTIC"); the drawer is a grid of icons
+            Line(InspectorCard.DrawerOpen && InspectorCard.DrawerShown >= 1f && dial == null && InspectorCard.DrawerButton("pace2") == null && InspectorCard.DrawerButton("twin").gameObject.activeInHierarchy
+                 && InspectorCard.DrawerButton("gate0").gameObject.activeInHierarchy && InspectorCard.DrawerButton("rider") == null,
+                 "more pulls the drawer out: twin, shadow, echo, stamp, gate, octave (§21: no rider card; Flow E1: no necklace, no pace row — also for a legacy cube)");
             if (captures) { Shoot("u2_drawer.png"); yield return null; yield return null; }
             int p0 = pushes;
             int f0 = dc.follow; InspectorCard.DrawerButton("shadow").Click();
@@ -373,11 +374,10 @@ public static class V4ChecksU2
             bool variantsClosed = !InspectorCard.PopoverOpen && CubeInspector.State == CubeInspector.Phase.Open;
             cubes0 = SequenceMaster.Cubes.Count; p0 = pushes; InspectorCard.DrawerButton("stamp").Click();
             bool stampOk = SequenceMaster.Cubes.Count == cubes0 + 1 && pushes - p0 == 1;
-            var st0 = dc.step; int pk = st0 == StepLen.Eighth ? 1 : 2; p0 = pushes; InspectorCard.DrawerButton("pace" + pk).Click();
-            bool paceOk = dc.step != st0 && pushes - p0 == 1;
+            bool paceOk = InspectorCard.DrawerButton("pace0") == null && InspectorCard.DrawerButton("pace4") == null;   // Flow E1: the pace buttons are gone
             Line(shadowOk && echoOk && shimmerOk && riderOk && gateOk && octOk && twinOk && stampOk && paceOk && variants && variantsClosed,
-                 "drawer controls: shadow, echo (hold: shimmer), gate, octave, twin (hold: the variants), stamp, pace — one History entry each (§21: the rider card is gone)",
-                 "shadow " + shadowOk + " echo " + echoOk + " shimmer " + shimmerOk + " rider gone " + riderOk + " gate " + gateOk + " octave " + octOk + " twin " + twinOk + " variants " + variants + "/" + variantsClosed + " stamp " + stampOk + " pace " + paceOk);
+                 "drawer controls: shadow, echo (hold: shimmer), gate, octave, twin (hold: the variants), stamp — one History entry each (§21: the rider card is gone; Flow E1: so are the pace buttons)",
+                 "shadow " + shadowOk + " echo " + echoOk + " shimmer " + shimmerOk + " rider gone " + riderOk + " gate " + gateOk + " octave " + octOk + " twin " + twinOk + " variants " + variants + "/" + variantsClosed + " stamp " + stampOk + " pace gone " + paceOk);
             InspectorCard.MoreTab.Click(); yield return Wait(0.3f);
 
             // ---- the chip: popover (recolour), right-click mute, hold spotlight

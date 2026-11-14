@@ -13,12 +13,16 @@ using UnityEngine;
 /// the loop when the column is gone or the presentation / the menu take the clock.
 /// v7 (D, SPEC v7 §14.4): drawing on a melody PHRASE loops the phrase's own span (<see cref="BeginPhrase"/>: it may cross several columns, and it
 /// follows the phrase as it grows while being drawn); <see cref="Column"/> is then the phrase's start column.
+/// Flow (F2, SPEC flow §2): a drawn melody may walk on through several grids of its lane, so the loop can cover a RANGE of columns
+/// (<see cref="Begin(int, int)"/>: <see cref="Column"/> .. <see cref="LastColumn"/>); it grows with the draft's span.
 /// </summary>
 public static class FocusLoop
 {
     public static bool Active { get; private set; }
     /// <summary>The looped column (-1 when inactive).</summary>
     public static int Column { get; private set; } = -1;
+    /// <summary>Flow (F2): the last looped column (= <see cref="Column"/> for a one-column loop; -1 when inactive).</summary>
+    public static int LastColumn { get; private set; } = -1;
     /// <summary>v7: the looped melody phrase (its index in SongManager.Islands), -1 = a column loop.</summary>
     public static int Phrase { get; private set; } = -1;
     public static event Action OnChanged;
@@ -30,18 +34,23 @@ public static class FocusLoop
     static bool hooked;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() { Active = false; Column = -1; Phrase = -1; WasStopped = false; EscClaimFrame = -10; hooked = false; }
+    static void ResetStatics() { Active = false; Column = -1; LastColumn = -1; Phrase = -1; WasStopped = false; EscClaimFrame = -10; hooked = false; }
 
     /// <summary>Loops <paramref name="column"/> (see the class summary). Ignored without a song or for a column that does not exist.</summary>
-    public static void Begin(int column)
+    public static void Begin(int column) { Begin(column, column); }
+
+    /// <summary>Flow (F2): loops columns <paramref name="column"/> .. <paramref name="lastColumn"/> as one region (a drawn melody walking on
+    /// through its lane); like <see cref="Begin(int)"/> otherwise.</summary>
+    public static void Begin(int column, int lastColumn)
     {
         var sm = SongManager.I;
         double start, end;
-        if (sm == null || !sm.HasSong || !Span(column, out start, out end)) return;
+        lastColumn = Mathf.Max(column, lastColumn);
+        if (sm == null || !sm.HasSong || !Span(column, lastColumn, out start, out end)) return;
         Hook();
-        bool changed = !Active || Column != column || Phrase >= 0;
+        bool changed = !Active || Column != column || LastColumn != lastColumn || Phrase >= 0;
         if (!Active) WasStopped = !GlobalClock.IsPlaying;
-        Active = true; Column = column; Phrase = -1;
+        Active = true; Column = column; LastColumn = lastColumn; Phrase = -1;
         StartRegion(start, end);
         if (changed) OnChanged?.Invoke();
     }
@@ -56,7 +65,7 @@ public static class FocusLoop
         var kb = SongManager.I.Islands[island];
         bool changed = !Active || Phrase != island;
         if (!Active) WasStopped = !GlobalClock.IsPlaying;
-        Active = true; Column = kb.column; Phrase = island;
+        Active = true; Column = kb.column; LastColumn = kb.column; Phrase = island;
         StartRegion(start, end);
         if (changed) OnChanged?.Invoke();
     }
@@ -115,7 +124,7 @@ public static class FocusLoop
     public static void Release()
     {
         if (!Active) return;
-        Active = false; Column = -1; Phrase = -1; WasStopped = false;
+        Active = false; Column = -1; LastColumn = -1; Phrase = -1; WasStopped = false;
         GlobalClock.ClearRegion();
         OnChanged?.Invoke();
     }
@@ -139,6 +148,18 @@ public static class FocusLoop
         return true;
     }
 
+    /// <summary>Flow (F2): song-beat span [start, end) of columns <paramref name="column"/> .. <paramref name="lastColumn"/> (a last column past
+    /// the song's end counts as the last one there is; false when the first does not exist).</summary>
+    public static bool Span(int column, int lastColumn, out double start, out double end)
+    {
+        if (!Span(column, out start, out end)) return false;
+        var sm = SongManager.I;
+        int last = Mathf.Min(lastColumn, sm.ColumnCount - 1);
+        double s2, e2;
+        if (last > column && Span(last, out s2, out e2)) end = e2;
+        return true;
+    }
+
     /// <summary>Every frame (PathManager.Update): keeps the region on the column's current span (bars, layout and tempo-map edits), releases
     /// the loop when the column is gone, and hands the clock over to the presentation (Release) or the menu (Dismiss).</summary>
     public static void Tick()
@@ -147,7 +168,7 @@ public static class FocusLoop
         if (Presenter.Active) { Release(); return; }
         if (MainMenu.IsShown) { Dismiss(); return; }
         double s, e;
-        if (!(Phrase >= 0 ? PhraseSpan(Phrase, out s, out e) : Span(Column, out s, out e))) { Release(); return; }
+        if (!(Phrase >= 0 ? PhraseSpan(Phrase, out s, out e) : Span(Column, LastColumn, out s, out e))) { Release(); return; }
         if (!GlobalClock.HasRegion || Math.Abs(s - GlobalClock.RegionStart) > 1e-6 || Math.Abs(e - GlobalClock.RegionEnd) > 1e-6)
         {
             GlobalClock.SetRegion(s, e);

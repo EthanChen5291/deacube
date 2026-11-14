@@ -356,10 +356,12 @@ public static class VoiceRules
     /// Resolves one hit into events written to <paramref name="outEvents"/>; returns the count (0 = silent).
     /// <paramref name="onDsp"/> is the step's start, <paramref name="windowEndDsp"/> the end of the window that
     /// contains it, <paramref name="nextHitDsp"/> the cube's next firing step in the same window (+inf if none),
-    /// <paramref name="stack"/> the other cubes on the tile.
+    /// <paramref name="stack"/> the other cubes on the tile. Flow (F1, SPAN): <paramref name="ringEndDsp"/> &gt; windowEndDsp = the pattern goes
+    /// straight on onto the next grid of the cube's lane, so the note itself (and its costume tones) may ring to there — a tie over the barline is
+    /// just a long note; its events are stamped with that end. Sub-hits and echoes still stay inside the window. 0 (the default) = the window end.
     /// </summary>
     public static int Resolve(AudioCube cube, AudioCube.Window w, TileInteraction tile, AudioCube.Hit hit, int stack, int pass,
-                              double onDsp, double stepSec, double windowEndDsp, double nextHitDsp, NoteEvent[] outEvents)
+                              double onDsp, double stepSec, double windowEndDsp, double nextHitDsp, NoteEvent[] outEvents, double ringEndDsp = 0.0)
     {
         if (cube == null || tile == null || outEvents == null || outEvents.Length == 0 || !hit.fires) return 0;
         int slot = Instruments.SlotOf(cube.instrument, cube.voice);   // v6: the cube's voice sounds; the rules below follow its group
@@ -370,6 +372,7 @@ public static class VoiceRules
         double bps = GlobalClock.BeatsPerSecond;
         double localBeat = w.length - (windowEndDsp - onDsp) * bps;
         double windowStartDsp = windowEndDsp - w.length / bps;
+        double capEnd = ringEndDsp > windowEndDsp ? ringEndDsp : windowEndDsp;   // Flow (F1): how far the note may ring (= the window end without a span)
         KeyBlock section = SectionIsland(cube, w, localBeat, island);
         int energy = section != null ? section.energy : 2;
         if (energy == 0 && IsSustaining(slot)) return 0;                                   // rule 9: hush silences the pads
@@ -440,7 +443,7 @@ public static class VoiceRules
             double oj = on + j * subSec;
             if (oj >= windowEndDsp - 0.02) break;
             double gj = j < r - 1 ? Math.Min(gateSec, subSec - 0.005) : gateSec;
-            double offj = ClampOff(slot, oj, double.IsInfinity(gj) ? double.PositiveInfinity : oj + gj, windowEndDsp, bps);
+            double offj = ClampOff(slot, oj, double.IsInfinity(gj) ? double.PositiveInfinity : oj + gj, capEnd, bps);
             int vj = Mathf.Clamp(Mathf.RoundToInt(vel * RatchetVel[j]), 1, 127);
             count = Push(outEvents, count, slot, midi, vj, oj, offj);
             // v7: a bent note plays alone — the costumes that pile chord tones around it (the pad's tones, the follow shadows) would rub against it
@@ -473,7 +476,7 @@ public static class VoiceRules
         }
         // v7: a flow pedal / a varied note only has to fit the chord; §21: EVERY carried window is a long-grid (flow) window, whatever its style flag
         bool fit = w.carried || w.flow || (w.pass >= 1 && island != null && island.vary >= 1);
-        return Stamp(outEvents, count, cube, island, windowStartDsp, windowEndDsp, bent, fit);
+        return Stamp(outEvents, count, cube, island, windowStartDsp, capEnd, bent, fit);
     }
 
     static readonly Dictionary<long, int> lastMonoKey = new Dictionary<long, int>();
@@ -652,7 +655,9 @@ public static class VoiceRules
         return Layered(folded, cube.layer);
     }
 
-    static TileInteraction NodeTile(AudioCube cube, int node) => cube != null && node >= 0 && node < cube.nodes.Count ? cube.nodes[node] : null;
+    /// <summary>The tile a node sounds on: its own — or, Flow (F1), the tile a span cube's note is realised on (AudioCube.RealTile: the same (x, z)
+    /// on the grid of its lane that plays it).</summary>
+    static TileInteraction NodeTile(AudioCube cube, int node) => cube == null || node < 0 || node >= cube.nodes.Count ? null : cube.HasThrough ? cube.RealTile(node) : cube.nodes[node];
     /// <summary>v7: the semitones node <paramref name="node"/> adds to <paramref name="tile"/>: its bend (on its home tile) + the lift sticker's octave;
     /// v9 (N): + its nudge (scale steps of the song key on that tile).</summary>
     static int NodeOffset(AudioCube cube, int node, TileInteraction tile) => BendOf(cube, tile, node) + (cube.ModOf(node) == 8 ? 12 : 0) + NudgeOf(cube, tile, node);

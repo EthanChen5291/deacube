@@ -781,7 +781,13 @@ public static class V3Fixes
             dial.gameObject.SetActive(true);
             Add(L(pend2 && cut == 1, "S5", "a necklace scroll cut short by the card closing still pushes History once", "pending " + pend2 + ", pushes " + cut));
         }
-        else Add(L(false, "F2", "necklace", "not found"));
+        else
+        {
+            // Flow E1 (2026-11-13): the legacy necklace left the card's UI (a legacy cube bakes on its first rhythm edit; [ ] − = stay wired), so its
+            // scroll (F2) and the cut-short scroll (S5) have nothing to act on — the old tip id points at "more" and no dial is built
+            bool none = InspectorCard.Dial == null && InspectorCard.Root != null && InspectorCard.Root.GetComponentsInChildren<NecklaceDial>(true).Length == 0;
+            Add(L(none && InspectorCard.MoreTab != null && dr == (RectTransform)InspectorCard.MoreTab.transform, "F2", "Flow E1: the necklace is gone from the card (no dial; the tip id inspector.necklace points at more)", "no dial " + none));
+        }
         // F11: the landing flash is capped and never strobes; landings (and squashes) go on
         c.SetStep(StepLen.Sixteenth); c.SetHits(-1); History.Push();
         int landings = 0;

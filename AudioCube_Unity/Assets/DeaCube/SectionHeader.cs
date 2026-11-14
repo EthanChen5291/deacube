@@ -11,13 +11,15 @@ using UnityEngine.UI;
 /// HERE (scissors: the boundary nearest the pointer — a dashed cut line shows it while the scissors are hovered), JOIN WITH THE NEXT, DUPLICATE
 /// the section, DRUMS (a drum Moon whose part starts at the section's first column), LAUNCH INTO THE NEXT SECTION (§21: a build-up — its last
 /// column's grids launch: a riser swells into the next section's first downbeat and a crash lands there; nothing moves) and DELETE (a red
-/// tear-off ✕). Icons first, a caption on hover; every gesture = one History entry (the ops
+/// tear-off with a trash can). Icons first, a caption on hover; every gesture = one History entry (the ops
 /// push: SongOps / SongManager; a deduplicated safety push covers the rest). It shows after 0.2 s over a plinth where no island is hovered (the
 /// island header wins), lingers 0.4 s, holds while the pointer is on it, hides while drawing / dragging / presenting / inspecting / in a menu.
 /// Geometry: package B's plinths when they are there (SectionPlinth), else the union of the section's grids (+ margins).
 /// SPEC v7 §17.1 (sections are objects — GarageBand's letters, Logic's arrangement markers): beside the letter a NAME button (the section's
 /// role: intro, verse, chorus, bridge, drop, outro — or none) opens a fan of the six role pictures + "none" (hover = the word; a click =
 /// SongOps.SetSectionRole). The pictures are <see cref="SectionRoles"/> glyphs, shared with the rail's brackets and the plinths.
+/// Flow E2 (a quiet world — the owner: "information is too condensed … BE SIMPLE AND MINIMALISTIC"): the ribbon is FOUR things — the LETTER
+/// (a click opens the name fan), COPY, the TRASH can (delete: never ✕) and ⋯, whose small card holds split, join, drums and the build-up.
 /// Also here, <see cref="MeasureTag"/> (SPEC v7 §13.4): "while drawing a melody the length reads as measures" — an ink tag at a melody phrase's
 /// end ("½ measure", "1 measure", "2 measures" … "4 measures · 1 section") that pops when the phrase grows.
 /// </summary>
@@ -32,7 +34,20 @@ public class SectionHeader : MonoBehaviour
     public static void Show(int s, float worldX = float.NaN) { if (I != null) { I.pinned = s; I.pinX = worldX; I.lingerT = 0f; } }
     public static void Hide() { if (I != null) { I.pinned = -1; I.hoverCand = -1; I.lingerT = 9f; I.target = -1; } }
 
-    public const float ShowDelay = 0.2f, Linger = 0.4f, BandW = 340f;
+    public const float ShowDelay = 0.2f, Linger = 0.4f, BandW = 216f;
+    /// <summary>Flow E2: the ⋯ button and its card (split, join, drums, build-up); the card is open.</summary>
+    public HudButton MoreButton => moreBtn;
+    public RectTransform MoreCard => more;
+    public bool MoreOpen => moreOpen;
+    /// <summary>Tests: the names of the ribbon's controls on screen, left to right (the ⋯ card's are not counted).</summary>
+    public List<string> ItemsShown()
+    {
+        var items = new List<RectTransform>(); var r = new List<string>();
+        foreach (Transform t in band) if (t.gameObject.activeSelf && t.GetComponent<HudButton>() != null) items.Add((RectTransform)t);
+        items.Sort((a, b) => a.anchoredPosition.x.CompareTo(b.anchoredPosition.x));
+        foreach (var t in items) r.Add(t.name);
+        return r;
+    }
     /// <summary>The stone of the plinths (package B's SectionPlinth.Stone): the ribbon's tails, the letter's disc (its cream letter reads on it).</summary>
     public static Color Stone => SectionPlinth.Stone;
 
@@ -62,8 +77,9 @@ public class SectionHeader : MonoBehaviour
     InkShape bandShape, tailL, tailR; InkPainter tagArt, cutArt;
     TMPro.TextMeshProUGUI letterText;
     CanvasGroup group;
-    HudButton splitBtn, joinBtn, dupBtn, drumsBtn, launchBtn, deleteBtn, nameBtn;
-    InkPainter launchArt, drumsArt, joinArt, splitArt, nameArt;
+    HudButton splitBtn, joinBtn, dupBtn, drumsBtn, launchBtn, deleteBtn, nameBtn, moreBtn;
+    InkPainter launchArt, drumsArt, joinArt, splitArt;
+    RectTransform more; bool moreOpen, moreUp;
     RectTransform roleFan; readonly HudButton[] roleBtns = new HudButton[7]; bool roleFanOpen;
     int pinned = -1, target = -1, hoverCand = -1, splitCol = -1, tick = int.MinValue, shownKey = int.MinValue;
     float pinX = float.NaN, hoverT, lingerT = 9f, shownA, anchorX = float.NaN, shakeT;
@@ -111,21 +127,28 @@ public class SectionHeader : MonoBehaviour
         bandShape.Shape = InkShape.Kind.RoundRect; bandShape.color = Comic.Cream; bandShape.Radius = 7f; bandShape.Wobble = 1.1f; bandShape.RotJitter = 0.6f;
         bandShape.SetInk(2f, 3.2f); bandShape.ShadowOffset = new Vector2(3f, -4f); bandShape.raycastTarget = true;
         // the letter tag: a stone disc lettered in Bangers, the section's measures as pips under it
-        tagRt = HudKit.Node(band, "Letter", new Vector2(0.5f, 0.5f), new Vector2(-146f, 1f), new Vector2(40f, 42f));
+        tagRt = HudKit.Node(band, "Letter", new Vector2(0.5f, 0.5f), new Vector2(-78f, 1f), new Vector2(40f, 42f));
         tagArt = tagRt.gameObject.AddComponent<InkPainter>(); tagArt.onPaint = PaintTag; tagArt.raycastTarget = true;
         letterText = HudKit.Words(tagRt, "L", "A", 21f, Comic.Cream, TMPro.TextAlignmentOptions.Center);
         letterText.font = Comic.DigitFont; letterText.fontSharedMaterial = Comic.DigitFont != null ? Comic.DigitFont.material : letterText.fontSharedMaterial;
         var lrt = letterText.rectTransform; lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f); lrt.sizeDelta = new Vector2(30f, 26f); lrt.anchoredPosition = new Vector2(0f, 5f);
-        InkCaption.Attach(tagRt.gameObject, "section");
-        nameBtn = Item("Name", new Vector2(-106f, 0f), PaintName, "name it", () => SetRoleFan(!roleFanOpen)); nameArt = nameBtn.GetComponent<InkPainter>();
-        splitBtn = Item("Split", new Vector2(-64f, 0f), PaintSplit, "split here", Split); splitArt = splitBtn.GetComponent<InkPainter>();
-        joinBtn = Item("Join", new Vector2(-24f, 0f), PaintJoin, "join with the next", Join); joinArt = joinBtn.GetComponent<InkPainter>();
-        dupBtn = Item("Duplicate", new Vector2(16f, 0f), PaintDup, "copy the section", Duplicate);
-        drumsBtn = Item("Drums", new Vector2(56f, 0f), PaintDrums, "drums for this section", Drums); drumsArt = drumsBtn.GetComponent<InkPainter>();
-        launchBtn = Item("Launch", new Vector2(96f, 0f), PaintLaunch, LaunchCaption, Launch); launchArt = launchBtn.GetComponent<InkPainter>();
-        deleteBtn = Item("Delete", new Vector2(140f, 0f), PaintTearOff, "delete the section", Delete);
+        // Flow E2: the ribbon is four things — the letter (a click = the name fan), copy, the trash can, ⋯ (split, join, drums, build-up)
+        nameBtn = HudKit.Control(tagArt, "section", () => { SetMore(false); SetRoleFan(!roleFanOpen); }, null, null, tagArt);
+        nameBtn.GetComponent<InkHover>().hoverScale = 1.1f;
+        dupBtn = Item("Duplicate", new Vector2(-26f, 0f), PaintDup, "copy the section", Duplicate);
+        deleteBtn = Item("Delete", new Vector2(26f, 0f), PaintTearOff, "delete the section", Delete);
+        moreBtn = Item("More", new Vector2(78f, 0f), PaintDots, "more", () => SetMore(!moreOpen));
+        more = HudKit.Node(ribbon, "MoreCard", new Vector2(0.5f, 0.5f), new Vector2(0f, -MoreDrop), new Vector2(MoreW, 58f));
+        var ms = more.gameObject.AddComponent<InkShape>();
+        ms.Shape = InkShape.Kind.RoundRect; ms.color = Comic.Cream; ms.Radius = 12f; ms.Wobble = 1.3f; ms.RotJitter = 1f;
+        ms.SetInk(2f, 3.4f); ms.ShadowOffset = new Vector2(4f, -5f); ms.raycastTarget = true;
+        splitBtn = Item("Split", new Vector2(-78f, 0f), PaintSplit, "split here", Split, more); splitArt = splitBtn.GetComponent<InkPainter>();
+        joinBtn = Item("Join", new Vector2(-26f, 0f), PaintJoin, "join with the next", Join, more); joinArt = joinBtn.GetComponent<InkPainter>();
+        drumsBtn = Item("Drums", new Vector2(26f, 0f), PaintDrums, "drums for this section", Drums, more); drumsArt = drumsBtn.GetComponent<InkPainter>();
+        launchBtn = Item("Launch", new Vector2(78f, 0f), PaintLaunch, LaunchCaption, Launch, more); launchArt = launchBtn.GetComponent<InkPainter>();
+        more.gameObject.SetActive(false);
         BuildRoleFan();
-        Hints.Register("section.name", nameBtn.transform as RectTransform);
+        Hints.Register("section.name", tagRt);
         Hints.Register("section.header", band);
         Hints.Register("section.split", splitBtn.transform as RectTransform);
         Hints.Register("section.launch", launchBtn.transform as RectTransform);
@@ -135,7 +158,7 @@ public class SectionHeader : MonoBehaviour
     void BuildRoleFan()
     {
         SectionRoles.Ensure();
-        roleFan = HudKit.Node(ribbon, "RoleFan", new Vector2(0.5f, 0.5f), new Vector2(-70f, 92f), new Vector2(300f, 60f));
+        roleFan = HudKit.Node(ribbon, "RoleFan", new Vector2(0.5f, 0.5f), new Vector2(0f, 92f), new Vector2(300f, 60f));
         for (int k = 0; k <= 6; k++)
         {
             int role = k;
@@ -163,7 +186,7 @@ public class SectionHeader : MonoBehaviour
         if (on && target < 0) return;
         roleFanOpen = on;
         HudKit.SetActive(roleFan, on);
-        if (on) { roleFan.SetAsLastSibling(); AudioPool.UI(ProceduralAudio.Pop(), 0.22f, 1.25f); }
+        if (on) { SetMore(false); roleFan.SetAsLastSibling(); AudioPool.UI(ProceduralAudio.Pop(), 0.22f, 1.25f); }
     }
 
     /// <summary>§17.1: names section <paramref name="role"/> (SongOps.SetSectionRole — one History entry).</summary>
@@ -183,9 +206,29 @@ public class SectionHeader : MonoBehaviour
     /// <summary>SongOps.SetSectionRole (package O, SPEC §17.1; one History entry).</summary>
     static bool RoleSetter(int s, int role) { var sm = SongManager.I; SongOps.SetSectionRole(s, role); return sm != null && sm.SectionRole(s) == role; }
 
-    HudButton Item(string name, Vector2 pos, System.Action<InkPainter> paint, string caption, System.Action onClick)
+    /// <summary>Flow E2: the ⋯ card's width and how far under (or over) the band's centre it hangs.</summary>
+    public const float MoreW = 232f, MoreDrop = 64f;
+
+    /// <summary>Flow E2: opens / closes the ⋯ card (split here, join with the next, drums, build-up).</summary>
+    void SetMore(bool on)
     {
-        var rt = HudKit.Node(band, name, new Vector2(0.5f, 0.5f), pos, new Vector2(36f, 36f));
+        if (more == null || moreOpen == on) return;
+        if (on && target < 0) return;
+        if (on) SetRoleFan(false);
+        moreOpen = on;
+        HudKit.SetActive(more, on);
+        if (on) { more.SetAsLastSibling(); shownKey = int.MinValue; AudioPool.UI(ProceduralAudio.Pop(), 0.22f, 1.2f); }
+    }
+
+    static void PaintDots(InkPainter p)
+    {
+        Vector2 c = p.Area.center;
+        for (int k = -1; k <= 1; k++) p.Disc(c + new Vector2(k * 7f, 0f) + p.Jit(k + 2, 0.4f), 2.6f, Comic.Ink);
+    }
+
+    HudButton Item(string name, Vector2 pos, System.Action<InkPainter> paint, string caption, System.Action onClick, Transform parent = null)
+    {
+        var rt = HudKit.Node(parent != null ? parent : band, name, new Vector2(0.5f, 0.5f), pos, new Vector2(36f, 36f));
         var art = rt.gameObject.AddComponent<InkPainter>();
         art.onPaint = paint;
         var b = HudKit.Control(art, caption, onClick, null, null, art);
@@ -400,7 +443,8 @@ public class SectionHeader : MonoBehaviour
     bool Hovering()
     {
         if (group == null || !group.blocksRaycasts) return false;
-        if (splitBtn.Hover || joinBtn.Hover || dupBtn.Hover || drumsBtn.Hover || launchBtn.Hover || deleteBtn.Hover || nameBtn.Hover) return true;
+        if (dupBtn.Hover || deleteBtn.Hover || nameBtn.Hover || moreBtn.Hover) return true;
+        if (moreOpen && (splitBtn.Hover || joinBtn.Hover || drumsBtn.Hover || launchBtn.Hover || RectTransformUtility.RectangleContainsScreenPoint(more, Input.mousePosition, null))) return true;
         if (roleFanOpen) { foreach (var b in roleBtns) if (b != null && b.Hover) return true; if (RectTransformUtility.RectangleContainsScreenPoint(roleFan, Input.mousePosition, null)) return true; }
         return RectTransformUtility.RectangleContainsScreenPoint(band, Input.mousePosition, null);
     }
@@ -459,10 +503,12 @@ public class SectionHeader : MonoBehaviour
         if (want != target)
         {
             target = want; shownKey = int.MinValue;
-            SetRoleFan(false);
+            SetRoleFan(false); SetMore(false);
             if (target >= 0) Onboarding.SectionHeaderShown();
         }
         if (roleFanOpen && Input.GetMouseButtonDown(0) && !Hovering()) SetRoleFan(false);
+        if (moreOpen && Input.GetMouseButtonDown(0) && !Hovering() && !PathManager.SimOnly) SetMore(false);
+        if (moreOpen && target < 0) SetMore(false);
         if (shakeT > 0f) { shakeT = Mathf.Max(0f, shakeT - dt / 0.35f); }
         int t = HudKit.TwosTick;
         if (t != tick)
@@ -494,8 +540,7 @@ public class SectionHeader : MonoBehaviour
         letterText.text = letter;
         letterText.color = SectionPlinth.LetterDeep(letter);
         InkCaption.Attach(tagRt.gameObject, "section " + LetterOf(s) + (role > 0 ? " · " + SectionRoles.Word(role) : "") + " · " + bars + (bars == 1 ? " measure" : " measures"));
-        InkCaption.Attach(nameBtn.gameObject, role > 0 ? SectionRoles.Word(role) : "name it");
-        tagArt.Repaint(); splitArt.Repaint(); joinArt.Repaint(); drumsArt.Repaint(); launchArt.Repaint(); nameArt.Repaint();
+        tagArt.Repaint(); splitArt.Repaint(); joinArt.Repaint(); drumsArt.Repaint(); launchArt.Repaint();
     }
 
     void LateUpdate()
@@ -519,8 +564,14 @@ public class SectionHeader : MonoBehaviour
         pos.y = Mathf.Clamp(pos.y, r.yMin + IslandHeader.ClearBottom + 30f, Mathf.Max(r.yMin + IslandHeader.ClearBottom + 30f, r.yMax - IslandHeader.ClearTop - 30f));
         if (shakeT > 0f) pos.x += Mathf.Sin(shakeT * 40f) * 5f * shakeT;
         ribbon.anchoredPosition = pos;
+        // Flow E2: the ⋯ card hangs under the band, its right edge under the ⋯; without room there (the deck, the transport) it opens above
+        if (more != null)
+        {
+            bool up = pos.y - MoreDrop - 34f < r.yMin + IslandHeader.ClearBottom;
+            if (up != moreUp || more.anchoredPosition.x != BandW * 0.5f - MoreW * 0.5f + 8f) { moreUp = up; more.anchoredPosition = new Vector2(BandW * 0.5f - MoreW * 0.5f + 8f, up ? MoreDrop : -MoreDrop); }
+        }
         // "split here": the cut across the plinth at the boundary a split would take
-        bool show = splitBtn.Hover && splitCol > 0;
+        bool show = moreOpen && splitBtn.Hover && splitCol > 0;
         Vector2 c0 = Vector2.zero, c1 = Vector2.zero;
         if (show)
         {
@@ -668,17 +719,8 @@ public class SectionHeader : MonoBehaviour
         IslandHeader.PaintSwell(p, p.Area.center, target >= 0 && Launching(target));
     }
 
-    static void PaintTearOff(InkPainter p)
-    {
-        Vector2 c = p.Area.center;
-        q.Clear();
-        q.Add(c + new Vector2(-13f, -11f)); q.Add(c + new Vector2(13f, -12f)); q.Add(c + new Vector2(12f, 11f));
-        q.Add(c + new Vector2(5f, 8f)); q.Add(c + new Vector2(0f, 12f)); q.Add(c + new Vector2(-5f, 8f)); q.Add(c + new Vector2(-12f, 11f));
-        p.Shift = new Vector2(2f, -2.5f); p.Fill(q, q.Count, Comic.A(Comic.Ink, 0.85f)); p.Shift = Vector2.zero;
-        p.InkFill(q, q.Count, Comic.Danger, 1.6f, Comic.Ink);
-        p.Line(c + new Vector2(-4.5f, -5f), c + new Vector2(4.5f, 4f), 2.6f, Comic.Cream, true);
-        p.Line(c + new Vector2(-4.5f, 4f), c + new Vector2(4.5f, -5f), 2.6f, Comic.Cream, true);
-    }
+    /// <summary>Delete = the trash can (the island ⋯ card's drawing: IslandHeader.PaintTrash) — the cross only ever closes.</summary>
+    static void PaintTearOff(InkPainter p) { IslandHeader.PaintTrash(p, p.Area.center, 0.92f); }
 }
 
 /// <summary>
@@ -756,7 +798,7 @@ public class MeasureTag : MonoBehaviour
                 var kb = sm.Islands[i];
                 int b = LengthOf(kb);
                 if (i >= beatsOf.Count) beatsOf.Add(b);
-                else if (beatsOf[i] != b) { if (same && b > beatsOf[i] && beatsOf[i] > 0) { grewKb = kb; grewT = Time.unscaledTime; grows++; } beatsOf[i] = b; }
+                else if (beatsOf[i] != b) { if (same && b > beatsOf[i] && beatsOf[i] > 0 && !(PathManager.FlowDrawing && !kb.IsPhrase)) { grewKb = kb; grewT = Time.unscaledTime; grows++; } beatsOf[i] = b; }   // Flow: no "2 measures" words while a path is drawn (the pips show the longer grid)
             }
             if (beatsOf.Count > sm.Islands.Count) beatsOf.RemoveRange(sm.Islands.Count, beatsOf.Count - sm.Islands.Count);
             if (pinned != null) want = pinned;

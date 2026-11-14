@@ -285,10 +285,13 @@ public static class V7ChecksU1
         return Rect.MinMaxRect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y), Mathf.Max(a.x, b.x), Mathf.Max(a.y, b.y));
     }
 
-    static readonly string[] ChordItems = { "Grip", "Eye", "RegDown", "RegUp", "Repeat", "Extend", "Launch", "DupRight", "DupBelow", "More" };   // §21: one EXTEND control (was Carry + Flow)
+    // Flow E2 (a quiet world): the ribbon at rest is FIVE things — move, mute, repeat, copy, ⋯; ▼ ▲, EXTEND →, LAUNCH and copy below ride in the ⋯ card
+    static readonly string[] ChordItems = { "Grip", "Eye", "Repeat", "DupRight", "More" };
+    /// <summary>Flow E2: every one of <paramref name="cs"/> rides in the header's ⋯ card (offered for this island, not on the ribbon).</summary>
+    static bool InCard(IslandHeader h, params Component[] cs) { foreach (var c in cs) if (c == null || !h.InMore(c) || h.OnRibbon(c)) return false; return true; }
     static string CaptionOf(Component c) { var k = c != null ? c.GetComponent<InkCaptionHover>() : null; return k != null ? k.words : ""; }
-    static readonly string[] StairItems = { "Grip", "Eye", "StairType", "StairDir", "StepsDown", "StepsUp", "StairRate", "StairLead", "RegDown", "RegUp", "Repeat", "More" };
-    static readonly string[] PhraseItems = { "Grip", "Eye", "Len½", "Len1", "Len2", "Len4", "LenAuto", "PhraseDouble", "PhraseCells", "RegDown", "RegUp", "Repeat", "More" };
+    static readonly string[] StairItems = { "Grip", "Eye", "StairDir", "DupRight", "More" };     // Flow E2: its direction is its main job; the rest in the ⋯ card
+    static readonly string[] PhraseItems = { "Grip", "Eye", "Repeat", "DupRight", "More" };     // Flow E2: lengths, double, cells, ▼ ▲ in the ⋯ card
 
     static bool Same(List<string> got, string[] want)
     {
@@ -314,12 +317,16 @@ public static class V7ChecksU1
         LoadFixture(); yield return Frames(2);
         yield return ShowHeader(sm.Islands[0]);
         var items = h.ItemsShown();
-        Line(Same(items, ChordItems) && h.KindShown == 0, "a chord island's band: grip, eye, ▼ ▲, repeat, EXTEND → (§21: one control for carry and flow), LAUNCH, duplicates, more (left to right)", Join(items));
-        Line(!h.StyleShown && !h.VaryShown && h.FillShown, "at ×1 no repeat-style / vary stickers; the fill-the-section tab stands over extend (columns follow in its section)",
+        Line(Same(items, ChordItems) && h.KindShown == 0 && InCard(h, h.RegisterDown, h.RegisterUp, h.Extend, h.Launch, h.DuplicateBelow),
+             "a chord island's band (Flow E2): five at rest — grip, mute, repeat, copy, more (left to right); ▼ ▲, EXTEND → (§21: one control for carry and flow), LAUNCH and copy below ride in its ⋯ card", Join(items));
+        Line(!h.StyleShown && !h.VaryShown && h.FillShown && InCard(h, h.FillSection), "at ×1 no repeat-style / vary stickers; fill-the-section is offered beside extend in the ⋯ card (columns follow in its section)",
              "style " + h.StyleShown + ", vary " + h.VaryShown + ", fill " + h.FillShown);
         int p0 = pushes;
-        h.Repeat.onClick(); yield return Frames(3);
-        Line(sm.Islands[0].repeat == 2 && h.StyleShown && h.VaryShown && pushes - p0 == 1, "from ×2 the repeat STYLE (⟲) and VARY (dice) stickers stand up over the repeat button", "repeat " + sm.Islands[0].repeat);
+        h.Repeat.onClick(); yield return Wait(0.6f);
+        bool calmAt2 = !h.StyleShown && !h.VaryShown;   // Flow E2: at rest the ribbon stays five things
+        h.HoldRepeatHot(60f); yield return Frames(3);    // (the pointer rests on the repeat control from here on)
+        Line(sm.Islands[0].repeat == 2 && calmAt2 && h.StyleShown && h.VaryShown && pushes - p0 == 1,
+             "from ×2 the repeat STYLE (⟲) and VARY (dice) stickers stand up over the repeat button — only while the pointer is on repeat (Flow E2: not at rest)", "repeat " + sm.Islands[0].repeat + ", at rest hidden " + calmAt2);
         p0 = pushes; h.Style.onClick(); yield return Frames(3);
         bool rw1 = sm.Islands[0].rewind; int d1 = pushes - p0;
         p0 = pushes; h.Style.onClick(); yield return Frames(3);
@@ -327,6 +334,7 @@ public static class V7ChecksU1
         var vs = new List<string>(); bool vok = true;
         foreach (int want in new[] { 1, 2, 0 }) { p0 = pushes; h.Vary.onClick(); yield return Frames(3); vs.Add(sm.Islands[0].vary + "/" + (pushes - p0)); vok &= sm.Islands[0].vary == want && pushes - p0 == 1; }
         Line(vok, "vary: same → vary → answer → same, one History entry each (SetVary)", Join(vs));
+        h.HoldRepeatHot(0f);   // (the pointer leaves the repeat control)
         // §21 EXTEND → (was: flow 0 → 3 in flow style + the carry wand in hop style): one control, ×1 → ×2 → ×3 → off, a LONG GRID (SetCarry(at, n, 1))
         var fs = new List<string>(); bool fok = true;
         string cap0 = CaptionOf(h.Extend);
@@ -384,11 +392,13 @@ public static class V7ChecksU1
         {
             yield return ShowHeader(sm.Islands[ki]);
             items = h.ItemsShown();
-            Line(Same(items, ChordItems) && h.KindShown == 2, "a keyboard's band: the same grid items (flow and launch too)", Join(items));
+            Line(Same(items, ChordItems) && h.KindShown == 2 && InCard(h, h.RegisterDown, h.RegisterUp, h.Extend, h.Launch, h.DuplicateBelow),
+                 "a keyboard's band: the same five (Flow E2); extend and launch too ride in its ⋯ card", Join(items));
             // §20.1 the keyboard's range: + an octave below / above (one History entry each, the notes keep their pitch: SongManager.SetKeyRange)
             var kk = sm.Islands[ki];
             int low0 = kk.chordRootMIDI, n0 = kk.KeyCount;
-            bool ends = h.KeysBelow != null && h.KeysBelow.gameObject.activeInHierarchy && h.KeysAbove != null && h.KeysAbove.gameObject.activeInHierarchy && !h.KeysFitShown;
+            if (!IslandHeader.MoreOpen) { h.More.onClick(); yield return Frames(3); }   // Flow E2: the range controls ride in the ⋯ card
+            bool ends = h.KeysBelow != null && h.KeysBelow.gameObject.activeInHierarchy && h.KeysAbove != null && h.KeysAbove.gameObject.activeInHierarchy && !h.KeysFitShown && InCard(h, h.KeysBelow, h.KeysAbove);
             int pk = pushes; h.KeysAbove.onClick(); yield return Frames(4);
             kk = sm.Islands[ki]; int low1 = kk.chordRootMIDI, n1 = kk.KeyCount; int dk1 = pushes - pk;
             pk = pushes; h.KeysBelow.onClick(); yield return Frames(4);
@@ -396,7 +406,7 @@ public static class V7ChecksU1
             yield return ShowHeader(kk); yield return Wait(0.3f);
             yield return Shot("u1_7_header_keyboard.png");
             Line(ends && low1 == low0 && n1 == n0 + 12 && dk1 == 1 && low2 == low0 - 12 && n2 == n0 + 24 && dk2 == 1,
-                 "a keyboard's ends: + an octave above / below (SongManager.SetKeyRange), one History entry each; no fit tab without notes",
+                 "a keyboard's ⋯ card (Flow E2: was stickers on the ribbon's ends): + an octave above / below (SongManager.SetKeyRange), one History entry each; no fit without notes",
                  "keys " + low0 + "+" + n0 + " → " + low1 + "+" + n1 + " → " + low2 + "+" + n2 + ", ends " + ends);
             int fl, fn; bool f1 = IslandHeader.FitKeys(53, 49, 60, 70, out fl, out fn); bool fitA = f1 && fl == 53 && fn == 25;
             bool f2 = IslandHeader.FitKeys(41, 49, 60, 64, out fl, out fn); bool fitB = f2 && fl == 53 && fn == 13;
@@ -417,7 +427,8 @@ public static class V7ChecksU1
         var kb = sm.Islands[si];
         yield return ShowHeader(kb, 12f);
         var items = h.ItemsShown();
-        Line(Same(items, StairItems) && h.KindShown == 3, "the stairs band: grip, eye, TYPE, DIRECTION, STEPS − +, RATE, LEAD-IN, ▼ ▲, repeat, more (no carry / flow / launch)", Join(items));
+        Line(Same(items, StairItems) && h.KindShown == 3 && InCard(h, h.StairType, h.StepsDown, h.StepsUp, h.StairRate, h.StairLead, h.RegisterDown, h.RegisterUp, h.Repeat) && !h.FlowShown && !h.LaunchShown,
+             "the stairs band (Flow E2): grip, mute, DIRECTION (its main job), copy, more; TYPE, STEPS − +, RATE, LEAD-IN, ▼ ▲ and repeat ride in its ⋯ card (no carry / flow / launch)", Join(items));
         Line(h.StepsShown == kb.stairSteps.ToString(), "the steps digit shows the island's steps", "'" + h.StepsShown + "' = " + kb.stairSteps);
         // the type fan: six types, the gold star on the best fit, a hovered type plays its run
         h.StairType.onClick(); yield return Frames(3);
@@ -484,7 +495,8 @@ public static class V7ChecksU1
         if (ph == null) { Line(false, "phrase header: no phrase (SongOps.AddPhrase)", "returned " + pi); yield break; }
         yield return ShowHeader(ph, 14f);
         var items = h.ItemsShown();
-        Line(Same(items, PhraseItems) && h.KindShown == 4, "the phrase band: grip, eye, LENGTH ½ 1 2 4 + auto, DOUBLE, CELLS, ▼ ▲, repeat, more", Join(items));
+        Line(Same(items, PhraseItems) && h.KindShown == 4 && InCard(h, h.PhraseLength(0), h.PhraseLength(1), h.PhraseLength(2), h.PhraseLength(3), h.PhraseLength(4), h.PhraseDouble, h.PhraseCells, h.RegisterDown, h.RegisterUp),
+             "the phrase band (Flow E2): grip, mute, repeat, copy, more; LENGTH ½ 1 2 4 + auto, DOUBLE, CELLS and ▼ ▲ ride in its ⋯ card", Join(items));
         var ls = new List<string>(); bool lok = true;
         int bpb = GlobalClock.BeatsPerBar;
         foreach (var kv in new[] { new[] { 2, 2 * bpb }, new[] { 0, bpb / 2 }, new[] { 1, bpb } })
@@ -592,23 +604,30 @@ public static class V7ChecksU1
         var sm = SongManager.I; var rail = UIManager.I.Rail;
         LoadFixture(); yield return Frames(3);
         rail.CountNow();
-        int ns = sm.SectionCount; bool letters = rail.SectionCountShown == ns; int bars = 0, ghosts = 0;
-        for (int s = 0; s < ns; s++) { letters &= rail.SectionLetterShown(s) == SectionHeader.LetterOf(s) && rail.SectionFirstShown(s) == sm.SectionFirst(s); bars += sm.SectionBars(s); ghosts += Mathf.Max(0, ProjectConfig.SectionBars - sm.SectionBars(s)); }
-        Line(letters && rail.MeasureNumbers == bars && rail.GhostMeasureCount == ghosts, "the rail groups its beads by section: a bracket + letter each, the measure numbers = the measures, dotted slots for a short section's missing measures",
-             ns + " sections, numbers " + rail.MeasureNumbers + " = " + bars + ", ghost slots " + rail.GhostMeasureCount + " = " + ghosts);
+        // T (the owner, on the rail: "way too complicate … BE SIMPLE AND MINIMALISTIC"): the rail is one row of pills — a pill per section in its
+        // letter's colour, as wide as the measures it plays — and nothing else. The checks below were the v7 rail's (brackets, measure numbers,
+        // dotted slots, the stairs' landscape, long-grid bars, launch marks, phrase bars, the name picture): each now holds the new rule.
+        float bpb = Mathf.Max(1, GlobalClock.BeatsPerBar);
+        int ns = sm.SectionCount; bool letters = rail.PillsShown == ns; int played = 0;
+        for (int s = 0; s < ns; s++)
+        {
+            int p = Mathf.Max(1, Mathf.RoundToInt((sm.SectionEndBeat(s) - sm.SectionStartBeat(s)) / bpb)); played += p;
+            letters &= rail.PillLetter(s) == SectionHeader.LetterOf(s) && rail.PillFirst(s) == sm.SectionFirst(s) && rail.PillMeasures(s) == p && rail.PillColour(s) == SectionPlinth.LetterTint(rail.PillLetter(s));
+        }
+        string only = RailChecks.PillsOnly(rail);
+        Line(letters && only == null, "the rail is one pill per section: its plinth's letter and colour, as wide as the measures it plays; no bracket, no measure numbers, no dotted slots",
+             only ?? ns + " sections = " + rail.PillsShown + " pills, " + played + " measures played");
         int b0 = sm.SectionLast(0);
-        Line(rail.GapAfter(b0) > 8f && rail.GapAfter(0) < 1f && rail.GapAfter(1) < 1f, "inside a section the beads touch, a gap between sections", "gap after col 0 " + rail.GapAfter(0).ToString("F1") + ", after the section " + rail.GapAfter(b0).ToString("F1"));
-        // stairs: a staircase bead, the ground after it lower — the rail's landscape
+        float gap = ns > 1 ? rail.PillX(1) - (rail.PillX(0) + rail.PillWidth(0)) : HudColumnRail.PillGap, inside = b0 > 0 ? rail.ColumnX(1) - (rail.ColumnX(0) + rail.ColumnWidth(0)) : 0f;
+        Line(Mathf.Abs(gap - HudColumnRail.PillGap) < 0.01f && Mathf.Abs(inside) < 0.01f && rail.ColumnX(0) >= rail.PillX(0) && rail.ColumnX(b0) + rail.ColumnWidth(b0) <= rail.PillX(0) + rail.PillWidth(0) + 0.01f,
+             "a section's columns share its pill (end to end, in the time they play); the pills stand a gap apart", "between columns 0 and 1: " + inside.ToString("F1") + ", between the pills: " + gap.ToString("F1"));
+        // stairs: nothing on the rail (was: a staircase bead and the rail's landscape)
         int si = SongOps.AddStairIsland(1, false); yield return Frames(3);
         rail.CountNow(); yield return Wait(0.8f);
-        int col = si >= 0 ? sm.Islands[si].column : 1;
-        KeyBlock after = sm.AnchorOf(col + 1);
-        int ai = IndexOf(after);
-        float gw = sm.GroundOf(col + 1) * HudColumnRail.HeightPx;
-        Line(si >= 0 && rail.BeadStairs(si) && gw < -1f && Mathf.Abs(rail.ColumnGround(col + 1) - gw) < 0.01f && Mathf.Abs(rail.ColumnGroundShown(col + 1) - gw) < 0.2f && ai >= 0 && rail.BeadY(ai) < rail.BeadY(IndexOf(sm.AnchorOf(0))) - 1f,
-             "a stairs bead is a staircase; the columns after a falling stair sit lower on the rail (GroundOf × " + HudColumnRail.HeightPx + " px)",
-             "ground after " + sm.GroundOf(col + 1).ToString("F2") + " u → " + rail.ColumnGroundShown(col + 1).ToString("F1") + " px; bead y " + rail.BeadY(ai).ToString("F1") + " vs " + rail.BeadY(IndexOf(sm.AnchorOf(0))).ToString("F1"));
-        // a long grid (§21), launch mark, a phrase bar, a name
+        only = RailChecks.PillsOnly(rail);
+        Line(si >= 0 && only == null && Mathf.Abs(rail.PillOf(0).anchoredPosition.y - rail.PillOf(rail.PillsShown - 1).anchoredPosition.y) < 0.01f,
+             "a stairs island adds nothing to the rail: the pills stay on one flat row", only ?? "stairs island " + si + ", pills " + rail.PillsShown + " at y " + rail.PillOf(0).anchoredPosition.y.ToString("F1"));
+        // a long grid (§21), a launch, a phrase, a name: the world's — the rail stays pills only
         sm.SetCarry(0, 2, 1); yield return Frames(2);
         int li = IndexOf(sm.AnchorOf(4));
         if (li >= 0) sm.SetLaunch(li, true);
@@ -619,33 +638,27 @@ public static class V7ChecksU1
         yield return Frames(2);
         SongOps.SetSectionRole(0, 3); yield return Frames(2);
         rail.CountNow();
-        ph = FirstOf(k => k.IsPhrase); int phi = IndexOf(ph);
-        li = IndexOf(sm.AnchorOf(sm.Islands.Count > 0 ? 4 : 0));
-        var tgs = sm.CarryTargets(0); int lgTo = tgs.Count > 0 ? sm.Islands.IndexOf(tgs[tgs.Count - 1]) : -1;
-        bool flowOk = rail.LongGridCount == 1 && rail.LongGridFrom(0) == 0 && rail.LongGridTo(0) == lgTo && rail.CarryArcCount == 0 && rail.FlowWaveCount == 0
-                      && rail.LongGridX1(0) - rail.LongGridX0(0) > rail.ColumnWidth(0) * 2.5f;
-        bool launchOk = rail.LaunchMarkCount >= 1;
-        float colW = rail.ColumnWidth(ph != null ? ph.column : 0);
-        bool phOk = phi >= 0 && rail.BeadPhrase(phi) && rail.BeadWidth(phi) > colW * 1.4f && rail.BeadLane(phi) >= 1;
-        Line(flowOk, "§21: a long grid is ONE bar around its beads (an extended grid over the next two: no wave, no hops)",
-             "long grids " + rail.LongGridCount + " (" + rail.LongGridFrom(0) + " → " + rail.LongGridTo(0) + " = " + lgTo + ", " + (rail.LongGridX1(0) - rail.LongGridX0(0)).ToString("F0") + " px), waves " + rail.FlowWaveCount + ", arcs " + rail.CarryArcCount);
-        Line(launchOk, "launch: a small ↗ after the launching island's bead", "marks " + rail.LaunchMarkCount);
-        Line(phOk, "a 2-measure phrase is one bar over the two measures it spans, above its columns' stacks", phi >= 0 ? "width " + rail.BeadWidth(phi).ToString("F0") + " (a column " + colW.ToString("F0") + "), lane " + rail.BeadLane(phi) : "no phrase");
-        Line(rail.SectionRoleShown(0) == 3, "the bracket shows the section's name picture (§17.1)", SectionRoles.Word(rail.SectionRoleShown(0)));
+        ph = FirstOf(k => k.IsPhrase);
+        var tgs = sm.CarryTargets(0);
+        var run0 = sm.LongGridOf(sm.Islands[0]); int size0 = run0 != null ? run0.Count : 0;
+        only = RailChecks.PillsOnly(rail);
+        var launcher = FirstOf(k => k.launch); li = IndexOf(launcher);   // (the phrase moved the islands' indices)
+        Line(sm.LongGrids.Count == 1 && size0 == tgs.Count + 1 && launcher != null && ph != null && sm.SectionRole(0) == 3 && only == null && rail.PillsShown == sm.SectionCount,
+             "§21 a long grid (an extended grid over the next two), a launch, a 2-measure phrase and a section name are in the song — and the rail stays pills only (no bar, no ↗, no phrase bar, no name picture)",
+             only ?? "long grids " + sm.LongGrids.Count + " (" + size0 + " grids), launch on island " + li + ", phrase " + (ph != null) + ", name " + SectionRoles.Word(sm.SectionRole(0)) + ", pills " + rail.PillsShown);
         if (OrbitCamera.I != null) OrbitCamera.I.FrameBounds(sm.SongBounds, 0.05f, true);
         yield return Wait(0.5f);
         yield return Shot("u1_7_rail.png");
-        // §21 (package K's runs): a chain of extends is ONE long grid — the run's last grid extends one more: still one bar, one grid longer
-        int chainEnd = rail.LongGridTo(0), size0 = rail.LongGridSize(0);
-        var ce = chainEnd >= 0 && chainEnd < sm.Islands.Count ? sm.Islands[chainEnd] : null;
+        // §21 (package K's runs): a chain of extends is ONE long grid — the run's last grid extends one more: still one run, one grid longer
+        var ce = run0 != null && run0.Count > 0 ? run0[run0.Count - 1] : null; int chainEnd = ce != null ? sm.Islands.IndexOf(ce) : -1;
         if (ce != null && ce.column < sm.SectionLast(sm.SectionOf(ce.column)) && sm.LaneNext(ce) != null)
         {
             sm.SetCarry(chainEnd, 1, 1); yield return Frames(2);
             rail.CountNow();
             var run = sm.LongGridOf(sm.Islands[0]);
-            Line(rail.LongGridCount == 1 && rail.LongGridSize(0) == size0 + 1 && run != null && run.Count == size0 + 1 && rail.LongGridTo(0) == sm.Islands.IndexOf(run[run.Count - 1]),
-                 "§21: a chain of extends (A → B → C … and its last grid on one more) is still ONE long-grid bar, one grid longer (SongManager.LongGridOf)",
-                 "bars " + rail.LongGridCount + ", grids " + size0 + " → " + rail.LongGridSize(0) + " (K's run " + (run != null ? run.Count : 0) + ")");
+            Line(sm.LongGrids.Count == 1 && run != null && run.Count == size0 + 1 && RailChecks.PillsOnly(rail) == null,
+                 "§21: a chain of extends (A → B → C … and its last grid on one more) is still ONE long grid, one grid longer (SongManager.LongGridOf); the rail stays pills only",
+                 "runs " + sm.LongGrids.Count + ", grids " + size0 + " → " + (run != null ? run.Count : 0));
         }
         else Info("§21 chain: the fixture's long grid already ends its section (" + chainEnd + ") — no chain to try");
         // a section reaching its 4 measures sparkles (the rail's bracket + the world) and says so once
@@ -658,7 +671,7 @@ public static class V7ChecksU1
         IslandTray.Close();
         yield return Frames(3);
         Line(sm.SectionBars(lastS) == ProjectConfig.SectionBars && Onboarding.SectionsFilled == sf0 + 1 && rail.SparkleCount == sp0 + 1 && Onboarding.LastFilledSection == lastS && events.Contains(Onboarding.Ev.SectionFilled),
-             "a section that reaches 4 measures sparkles (rail + world) and reports section.filled", "section " + lastS + " " + have + " → " + sm.SectionBars(lastS) + " measures, sparkles " + (rail.SparkleCount - sp0));
+             "a section that reaches 4 measures sparkles (the world; its pill pops once on the rail) and reports section.filled", "section " + lastS + " " + have + " → " + sm.SectionBars(lastS) + " measures, pops " + (rail.SparkleCount - sp0));
         LoadFixture(); yield return Frames(2);
     }
 
