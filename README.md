@@ -17,9 +17,9 @@
 
 DeaCube is a spatial music composition software that aims to simplify its process by:
 
-(1.) Handling the "music theory" semantics by pre-tuning chord selection to a genre
-(2.) Following a building-block design, where measures are blocks and sections are islands
-(3.) Intuitive paths and melody creation through spatial sequencing
+1. Handling the "music theory" semantics by pre-tuning chord selection to a genre
+2. Following a building-block design, where measures are blocks and sections are islands
+3. Intuitive paths and melody creation through spatial sequencing
 
 Have fun!
 
